@@ -10,11 +10,28 @@ NC='\033[0m'
 OK="${GREEN}✔${NC}"
 FAIL="${RED}✖${NC}"
 
-# ====== Регион ======
+# ====== Базовые функции ======
 get_ip() { curl -4 -s ipinfo.io/ip; }
 get_generic_region() { curl -4 -s ipinfo.io/country || echo "?"; }
+
+# ====== YouTube регион (УЛУЧШЕННЫЙ) ======
 get_youtube_region() {
-    curl -4 -sI https://www.youtube.com | grep -i "x-country-code" | awk '{print $2}' | tr -d '\r'
+    PAGE=$(curl -4 -s --max-time 10 https://www.youtube.com/premium)
+
+    # ищем страну в HTML (ytcfg)
+    REGION=$(echo "$PAGE" | grep -o '"GL":"[A-Z][A-Z]"' | head -1 | cut -d '"' -f4)
+
+    # fallback через заголовок
+    if [[ -z "$REGION" ]]; then
+        REGION=$(curl -4 -sI https://www.youtube.com | grep -i "x-country-code" | awk '{print $2}' | tr -d '\r')
+    fi
+
+    # fallback через IP
+    if [[ -z "$REGION" ]]; then
+        REGION=$(get_generic_region)
+    fi
+
+    echo "${REGION:-?}"
 }
 
 # ====== Проверка сервисов ======
@@ -25,10 +42,15 @@ check_netflix() {
 }
 
 check_youtube() {
-    curl -4 -s --max-time 10 https://www.youtube.com > /dev/null
-    [[ $? -eq 0 ]] && YT_STATUS=$OK || YT_STATUS=$FAIL
+    PAGE=$(curl -4 -s --max-time 10 https://www.youtube.com/premium)
+
+    if [[ "$PAGE" == *"Premium is not available"* ]]; then
+        YT_STATUS=$FAIL
+    else
+        YT_STATUS=$OK
+    fi
+
     YT_REGION=$(get_youtube_region)
-    YT_REGION=${YT_REGION:-"?"}
 }
 
 check_disney() {
@@ -61,11 +83,14 @@ geoip_check_inline() {
 
     G1=$(curl -4 -s ipinfo.io/country)
     G2=$(curl -4 -s http://ip-api.com/line/?fields=countryCode)
-    G3=$(curl -4 -s https://ipwho.is/ | grep '"country_code"' | cut -d '"' -f4)
+    G3=$(curl -4 -s https://ipwho.is/ | grep '"country_code":' | cut -d '"' -f4)
     G4=$(curl -4 -s https://ipapi.co/country/)
     G5=$(curl -4 -s ifconfig.co/country-iso)
 
-    G1=${G1:-"-"}; G2=${G2:-"-"}; G3=${G3:-"-"}; G4=${G4:-"-"}; G5=${G5:-"-"}
+    # защита от мусора
+    [[ -z "$G3" || "$G3" == "null" ]] && G3="-"
+
+    G1=${G1:-"-"}; G2=${G2:-"-"}; G4=${G4:-"-"}; G5=${G5:-"-"}
 
     UNIQUE=$(printf "%s\n" "$G1" "$G2" "$G3" "$G4" "$G5" | sort -u | wc -l)
 
@@ -76,7 +101,7 @@ geoip_check_inline() {
     fi
 
     echo -e "\n${YELLOW}==== GEOIP ====${NC}"
-    printf "%-7s %-7s %-7s %-7s %-7s\n" "ipinfo" "ip-api" "whois" "ipapi" "ifcfg"
+    printf "%-7s %-7s %-7s %-7s %-7s\n" "ipinfo" "ip-api" "whois2" "ipapi" "ifcfg"
     printf "${COLOR}%-7s %-7s %-7s %-7s %-7s${NC}\n" "$G1" "$G2" "$G3" "$G4" "$G5"
     echo -e "Итог: ${COLOR}${NOTE}${NC}"
 }
@@ -130,6 +155,7 @@ while true; do
     echo "1) Проверка сервисов + GeoIP + Blacklist"
     echo "2) Тест скорости"
     echo "3) Выход"
+
     read -p "Введите номер: " choice
 
     case $choice in
