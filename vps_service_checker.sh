@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # ============================================
-#   🎮 ULTRA IP & STREAMING CHECKER v4.1 🎮
+#   🎮 ULTRA IP & STREAMING CHECKER v4.2 🎮
 #   Стиль: C3 + Y3‑B + S3 + G3‑B
 #   Анимация: L1 (одной строкой, динамическая)
 #   Временный файл: /tmp/.netcheck.$$
+#   Формат: S3 (фиксированные строки)
 # ============================================
 
 RED='\033[0;31m'
@@ -154,25 +155,31 @@ run_speedtest() {
     echo "$DL|$UL|$PING"
 }
 
-# ===== Основная проверка (фоновая, пишет в файл) =====
+# ===== Основная проверка (фоновая, S3 формат) =====
 
 run_checks_core() {
+
+    # ===== IP =====
     echo "[IP]" > "$TMP"
-    IP=$(get_ip)
-    ASN=$(get_asn)
-    REGION=$(get_region)
+    echo "$(get_ip)" >> "$TMP"
+    echo "$(get_asn)" >> "$TMP"
+    echo "$(get_region)" >> "$TMP"
     GEO=$(geoip_check)
     GEO_STATUS=$(echo "$GEO" | cut -d '|' -f4)
-    TYPE=$(get_ip_type "$ASN")
-    CLASS=$(classify_ip "$TYPE" "$GEO_STATUS" "$ASN")
+    TYPE=$(get_ip_type "$(get_asn)")
+    CLASS=$(classify_ip "$TYPE" "$GEO_STATUS" "$(get_asn)")
+    echo "$TYPE" >> "$TMP"
+    echo "$CLASS" >> "$TMP"
+    echo "$GEO_STATUS" >> "$TMP"
 
-    echo "$IP|$ASN|$REGION|$TYPE|$CLASS|$GEO_STATUS" >> "$TMP"
-
+    # ===== YouTube =====
     echo "[YOUTUBE]" >> "$TMP"
-    YT_MAIN=$(check_youtube_main)
+    echo "$(check_youtube_main)" >> "$TMP"
     YT_DATA=$(get_youtube_info)
-    echo "$YT_MAIN|$YT_DATA" >> "$TMP"
+    echo "$(echo "$YT_DATA" | cut -d '|' -f1)" >> "$TMP"
+    echo "$(echo "$YT_DATA" | cut -d '|' -f2)" >> "$TMP"
 
+    # ===== Streaming =====
     echo "[STREAMING]" >> "$TMP"
     echo "$(check_service https://www.netflix.com)" >> "$TMP"
     echo "$(check_service https://www.hbomax.com)" >> "$TMP"
@@ -182,6 +189,7 @@ run_checks_core() {
     echo "$(check_service https://tv.apple.com)" >> "$TMP"
     echo "$(check_service https://www.crunchyroll.com)" >> "$TMP"
 
+    # ===== Gaming =====
     echo "[GAMING]" >> "$TMP"
     echo "$(check_service https://store.steampowered.com)" >> "$TMP"
     echo "$(check_service https://store.epicgames.com)" >> "$TMP"
@@ -190,6 +198,7 @@ run_checks_core() {
     echo "$(check_service https://battle.net)" >> "$TMP"
     echo "$(check_service https://socialclub.rockstargames.com)" >> "$TMP"
 
+    # ===== Social =====
     echo "[SOCIAL]" >> "$TMP"
     echo "$(check_service https://www.instagram.com)" >> "$TMP"
     echo "$(check_service https://x.com)" >> "$TMP"
@@ -197,16 +206,25 @@ run_checks_core() {
     echo "$(check_service https://www.reddit.com)" >> "$TMP"
     echo "$(check_service https://web.telegram.org)" >> "$TMP"
 
+    # ===== Stores =====
     echo "[STORES]" >> "$TMP"
     echo "$(check_service https://www.amazon.com)" >> "$TMP"
     echo "$(check_service https://www.ebay.com)" >> "$TMP"
     echo "$(check_service https://www.aliexpress.com)" >> "$TMP"
 
+    # ===== Blacklist =====
     echo "[BLACKLIST]" >> "$TMP"
-    echo "$(check_blacklist)" >> "$TMP"
+    BL=$(check_blacklist)
+    echo "$(echo "$BL" | cut -d '|' -f1)" >> "$TMP"
+    echo "$(echo "$BL" | cut -d '|' -f2)" >> "$TMP"
+    echo "$(echo "$BL" | cut -d '|' -f3)" >> "$TMP"
 
+    # ===== Speedtest =====
     echo "[SPEEDTEST]" >> "$TMP"
-    echo "$(run_speedtest)" >> "$TMP"
+    SPEED=$(run_speedtest)
+    echo "$(echo "$SPEED" | cut -d '|' -f1)" >> "$TMP"
+    echo "$(echo "$SPEED" | cut -d '|' -f2)" >> "$TMP"
+    echo "$(echo "$SPEED" | cut -d '|' -f3)" >> "$TMP"
 }
 
 # ===== Анимация с динамическими этапами =====
@@ -228,8 +246,7 @@ run_checks() {
 
     i=0
     while kill -0 "$pid" 2>/dev/null; do
-        msg="${steps[i]}"
-        spinner "$pid" "$msg"
+        spinner "$pid" "${steps[i]}"
         ((i=(i+1)%${#steps[@]}))
     done
 
@@ -238,65 +255,41 @@ run_checks() {
     clear
 
     # ===== Чтение результатов =====
-    IP_DATA=$(grep -A1 "
 
-\[IP\]
+    # IP (6 строк)
+    IP=$(sed -n '2p' "$TMP")
+    ASN=$(sed -n '3p' "$TMP")
+    REGION=$(sed -n '4p' "$TMP")
+    TYPE=$(sed -n '5p' "$TMP")
+    CLASS=$(sed -n '6p' "$TMP")
+    GEO_STATUS=$(sed -n '7p' "$TMP")
 
-" "$TMP" | tail -1)
-    IP=$(echo "$IP_DATA" | cut -d '|' -f1)
-    ASN=$(echo "$IP_DATA" | cut -d '|' -f2)
-    REGION=$(echo "$IP_DATA" | cut -d '|' -f3)
-    TYPE=$(echo "$IP_DATA" | cut -d '|' -f4)
-    CLASS=$(echo "$IP_DATA" | cut -d '|' -f5)
-    GEO_STATUS=$(echo "$IP_DATA" | cut -d '|' -f6)
+    # YouTube (3 строки)
+    YT_MAIN=$(sed -n '9p' "$TMP")
+    YT_REGION=$(sed -n '10p' "$TMP")
+    YT_PREMIUM=$(sed -n '11p' "$TMP")
 
-    YT_DATA=$(grep -A1 "
+    # Streaming (7 строк)
+    STREAM=($(sed -n '13,19p' "$TMP"))
 
-\[YOUTUBE\]
+    # Gaming (6 строк)
+    GAME=($(sed -n '21,26p' "$TMP"))
 
-" "$TMP" | tail -1)
-    YT_MAIN=$(echo "$YT_DATA" | cut -d '|' -f1)
-    YT_REGION=$(echo "$YT_DATA" | cut -d '|' -f2)
-    YT_PREMIUM=$(echo "$YT_DATA" | cut -d '|' -f3)
+    # Social (5 строк)
+    SOCIAL=($(sed -n '28,32p' "$TMP"))
 
-    STREAM=($(grep -A7 "
+    # Stores (3 строки)
+    STORES=($(sed -n '34,36p' "$TMP"))
 
-\[STREAMING\]
+    # Blacklist (3 строки)
+    BL_SPAM=$(sed -n '38p' "$TMP")
+    BL_SORBS=$(sed -n '39p' "$TMP")
+    BL_IP=$(sed -n '40p' "$TMP")
 
-" "$TMP" | tail -7))
-    GAME=($(grep -A6 "
-
-\[GAMING\]
-
-" "$TMP" | tail -6))
-    SOCIAL=($(grep -A5 "
-
-\[SOCIAL\]
-
-" "$TMP" | tail -5))
-    STORES=($(grep -A3 "
-
-\[STORES\]
-
-" "$TMP" | tail -3))
-
-    BL_DATA=$(grep -A1 "
-
-\[BLACKLIST\]
-
-" "$TMP" | tail -1)
-    BL_SPAM=$(echo "$BL_DATA" | cut -d '|' -f1)
-    BL_SORBS=$(echo "$BL_DATA" | cut -d '|' -f2)
-    BL_IP=$(echo "$BL_DATA" | cut -d '|' -f3)
-
-    SPEED_DATA=$(grep -A1 "
-
-\[SPEEDTEST\]
-
-" "$TMP" | tail -1)
-    DL=$(echo "$SPEED_DATA" | cut -d '|' -f1)
-    UL=$(echo "$SPEED_DATA" | cut -d '|' -f2)
-    PING=$(echo "$SPEED_DATA" | cut -d '|' -f3)
+    # Speedtest (3 строки)
+    DL=$(sed -n '42p' "$TMP")
+    UL=$(sed -n '43p' "$TMP")
+    PING=$(sed -n '44p' "$TMP")
 
     rm -f "$TMP"
 
