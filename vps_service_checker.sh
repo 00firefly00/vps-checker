@@ -15,6 +15,35 @@ get_ip() { curl -4 -s ipinfo.io/ip; }
 get_region() { curl -4 -s ipinfo.io/country || echo "?"; }
 get_asn() { curl -4 -s ipinfo.io/org || echo "Unknown"; }
 
+# ====== Тип IP ======
+get_ip_type() {
+    ORG=$(get_asn)
+
+    if [[ "$ORG" =~ (Mobile|Wireless|LTE) ]]; then
+        echo "Mobile"
+    elif [[ "$ORG" =~ (ISP|Telecom|Residential) ]]; then
+        echo "Residential"
+    else
+        echo "Datacenter"
+    fi
+}
+
+# ====== Анимация ======
+spinner() {
+    local pid=$!
+    local delay=0.15
+    local spinstr='+-×'
+
+    while ps -p $pid > /dev/null 2>&1; do
+        for i in $(seq 0 2); do
+            printf "\r${CYAN}Проверка... ${spinstr:$i:1}${NC}"
+            sleep $delay
+        done
+    done
+
+    printf "\r${GREEN}Проверка завершена ✔${NC}\n"
+}
+
 # ====== YouTube ======
 get_youtube_info() {
     PAGE=$(curl -4 -s --max-time 10 https://www.youtube.com/premium)
@@ -39,32 +68,34 @@ check_service() {
 }
 
 # ====== Сервисы ======
-check_netflix() { NETFLIX_STATUS=$(check_service "https://www.netflix.com"); NETFLIX_REGION=$(get_region); }
+run_checks() {
+    NETFLIX_STATUS=$(check_service "https://www.netflix.com"); NETFLIX_REGION=$(get_region)
 
-check_youtube() {
     YT_STATUS=$(check_service "https://www.youtube.com")
     DATA=$(get_youtube_info)
     YT_REGION=$(echo $DATA | cut -d '|' -f1)
     YT_PREMIUM=$(echo $DATA | cut -d '|' -f2)
+
+    DS_STATUS=$(check_service "https://www.disneyplus.com"); DS_REGION=$(get_region)
+    TT_STATUS=$(check_service "https://www.tiktok.com"); TT_REGION=$(get_region)
+    SP_STATUS=$(check_service "https://www.spotify.com"); SP_REGION=$(get_region)
+    CG_STATUS=$(check_service "https://chat.openai.com"); CG_REGION=$(get_region)
+    META_STATUS=$(check_service "https://www.facebook.com"); META_REGION=$(get_region)
+
+    MS_REGION=$(get_region)
 }
-
-check_disney() { DS_STATUS=$(check_service "https://www.disneyplus.com"); DS_REGION=$(get_region); }
-check_tiktok() { TT_STATUS=$(check_service "https://www.tiktok.com"); TT_REGION=$(get_region); }
-check_spotify() { SP_STATUS=$(check_service "https://www.spotify.com"); SP_REGION=$(get_region); }
-check_chatgpt() { CG_STATUS=$(check_service "https://chat.openai.com"); CG_REGION=$(get_region); }
-check_meta() { META_STATUS=$(check_service "https://www.facebook.com"); META_REGION=$(get_region); }
-
-# Microsoft только страна
-check_microsoft() { MS_REGION=$(get_region); }
 
 # ====== GeoIP ======
 geoip_check_inline() {
     G1=$(curl -4 -s ipinfo.io/country)
     G2=$(curl -4 -s http://ip-api.com/line/?fields=countryCode)
-    G3=$(curl -4 -s https://ipapi.co/country/)
-    G4=$(curl -4 -s ifconfig.co/country-iso)
-    G5=$(curl -4 -s https://api.2ip.io/geo.json | grep '"country_code"' | cut -d '"' -f4)
 
+    G3=$(curl -4 -s https://ipapi.co/country/)
+    [[ "$G3" == *"error"* || "$G3" == *"{"* ]] && G3="-"
+
+    G4=$(curl -4 -s ifconfig.co/country-iso)
+
+    G5=$(curl -4 -sL https://api.2ip.io/geo.json | grep '"country_code"' | cut -d '"' -f4)
     [[ -z "$G5" || "$G5" == *"<"* ]] && G5="-"
 
     UNIQUE=$(printf "%s\n" "$G1" "$G2" "$G3" "$G4" "$G5" | sort -u | wc -l)
@@ -83,9 +114,24 @@ geoip_check_inline() {
     MAIN_REGION="$G1"
 }
 
-# ====== Оценка IP ======
+# ====== Реальный регион ======
+real_region_check() {
+    echo -e "\n${CYAN}==== РЕАЛЬНЫЙ РЕГИОН ====${NC}"
+    echo "YouTube: $YT_REGION"
+    echo "Spotify: $SP_REGION"
+    echo "ChatGPT: $CG_REGION"
+
+    REAL=$(printf "%s\n" "$YT_REGION" "$SP_REGION" "$CG_REGION" | sort | uniq -c | sort -nr | head -1 | awk '{print $2}')
+    echo -e "${GREEN}ФАКТИЧЕСКИЙ РЕГИОН: $REAL${NC}"
+}
+
+# ====== Итог ======
 ip_summary() {
     echo -e "\n${CYAN}==== ОЦЕНКА IP ====${NC}"
+
+    TYPE=$(get_ip_type)
+
+    echo -e "Тип IP: ${YELLOW}$TYPE${NC}"
 
     case "$MAIN_REGION" in
         RU|BY|IR|CN)
@@ -127,14 +173,15 @@ print_results() {
     printf "| %-10s | %b | %-8s |\n" "Spotify" "$SP_STATUS" "$SP_REGION"
     printf "| %-10s | %b | %-8s |\n" "ChatGPT" "$CG_STATUS" "$CG_REGION"
     printf "| %-10s | %b | %-8s |\n" "Meta" "$META_STATUS" "$META_REGION"
-    printf "| %-10s | %-10s | %-8s |\n" "Microsoft" "" "$MS_REGION"
+    printf "| %-10s | %-10s | %-8s |\n" "Microsoft" "-" "$MS_REGION"
 
     geoip_check_inline
-    ip_summary
+    real_region_check
 
     echo -e "\n${CYAN}==== ASN ====${NC}"
     echo -e "${YELLOW}$(get_asn)${NC}"
 
+    ip_summary
     check_blacklist
 }
 
@@ -150,13 +197,7 @@ speed_test() {
 
     RESULT=$(speedtest-cli --simple 2>/dev/null)
 
-    PING=$(echo "$RESULT" | grep "Ping" | awk '{print $2" "$3}')
-    DOWN=$(echo "$RESULT" | grep "Download" | awk '{print $2" "$3}')
-    UP=$(echo "$RESULT" | grep "Upload" | awk '{print $2" "$3}')
-
-    echo -e "\n${YELLOW}Ping: $PING${NC}"
-    echo -e "${YELLOW}Download: $DOWN${NC}"
-    echo -e "${YELLOW}Upload: $UP${NC}"
+    echo -e "${YELLOW}$RESULT${NC}"
 }
 
 # ====== Меню ======
@@ -170,14 +211,8 @@ while true; do
 
     case $choice in
         1)
-            check_netflix
-            check_youtube
-            check_disney
-            check_tiktok
-            check_spotify
-            check_chatgpt
-            check_meta
-            check_microsoft
+            run_checks & spinner
+            wait
             print_results
             ;;
         2)
