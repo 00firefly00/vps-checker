@@ -28,9 +28,9 @@ get_ip_type() {
     fi
 }
 
-# ====== Анимация ======
+# ====== Спиннер ======
 spinner() {
-    local pid=$!
+    local pid=$1
     local delay=0.15
     local spinstr='+-×'
 
@@ -67,7 +67,7 @@ check_service() {
     [[ $? -eq 0 ]] && echo "$OK" || echo "$FAIL"
 }
 
-# ====== Сервисы ======
+# ====== Основные проверки ======
 run_checks() {
     NETFLIX_STATUS=$(check_service "https://www.netflix.com"); NETFLIX_REGION=$(get_region)
 
@@ -85,7 +85,7 @@ run_checks() {
     MS_REGION=$(get_region)
 }
 
-# ====== GeoIP ======
+# ====== GEOIP ======
 geoip_check_inline() {
     G1=$(curl -4 -s ipinfo.io/country)
     G2=$(curl -4 -s http://ip-api.com/line/?fields=countryCode)
@@ -125,12 +125,11 @@ real_region_check() {
     echo -e "${GREEN}ФАКТИЧЕСКИЙ РЕГИОН: $REAL${NC}"
 }
 
-# ====== Итог ======
+# ====== Оценка ======
 ip_summary() {
     echo -e "\n${CYAN}==== ОЦЕНКА IP ====${NC}"
 
     TYPE=$(get_ip_type)
-
     echo -e "Тип IP: ${YELLOW}$TYPE${NC}"
 
     case "$MAIN_REGION" in
@@ -196,7 +195,6 @@ speed_test() {
     echo "Проверка скорости..."
 
     RESULT=$(speedtest-cli --simple 2>/dev/null)
-
     echo -e "${YELLOW}$RESULT${NC}"
 }
 
@@ -211,8 +209,12 @@ while true; do
 
     case $choice in
         1)
-            run_checks & spinner
-            wait
+            run_checks &
+            pid=$!
+
+            spinner $pid
+            wait $pid
+
             print_results
             ;;
         2)
