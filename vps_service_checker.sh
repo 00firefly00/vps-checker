@@ -28,20 +28,17 @@ get_ip_type() {
     fi
 }
 
-# ====== Спиннер ======
+# ====== Спиннер (работает в фоне) ======
 spinner() {
-    local pid=$1
     local delay=0.15
     local spinstr='+-×'
 
-    while ps -p $pid > /dev/null 2>&1; do
+    while true; do
         for i in $(seq 0 2); do
             printf "\r${CYAN}Проверка... ${spinstr:$i:1}${NC}"
             sleep $delay
         done
     done
-
-    printf "\r${GREEN}Проверка завершена ✔${NC}\n"
 }
 
 # ====== YouTube ======
@@ -209,11 +206,15 @@ while true; do
 
     case $choice in
         1)
-            run_checks &
-            pid=$!
+            spinner &
+            SPIN_PID=$!
 
-            spinner $pid
-            wait $pid
+            run_checks
+
+            kill $SPIN_PID 2>/dev/null
+            wait $SPIN_PID 2>/dev/null
+
+            echo -e "\r${GREEN}Проверка завершена ✔${NC}"
 
             print_results
             ;;
