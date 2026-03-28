@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # ============================================
-#   🎮 ULTRA IP & STREAMING CHECKER v4.2 🎮
+#   🎮 ULTRA IP & STREAMING CHECKER v4.3 🎮
 #   Стиль: C3 + Y3‑B + S3 + G3‑B
 #   Анимация: L1 (одной строкой, динамическая)
 #   Временный файл: /tmp/.netcheck.$$
 #   Формат: S3 (фиксированные строки)
+#   Speedtest — только отдельный пункт меню
 # ============================================
 
 RED='\033[0;31m'
@@ -147,15 +148,23 @@ check_blacklist() {
     echo "$SPAM|$SORBS|$IP"
 }
 
-run_speedtest() {
+run_speedtest_only() {
+    clear
+    echo -e "${MAGENTA}💎 SPEEDTEST MODULE 💎${NC}"
+    echo "════════════════════════════════════"
     RESULT=$(curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 - 2>/dev/null)
+
     DL=$(echo "$RESULT" | grep "Download" | awk '{print $2" "$3}')
     UL=$(echo "$RESULT" | grep "Upload" | awk '{print $2" "$3}')
     PING=$(echo "$RESULT" | grep "Hosted" | awk '{print $6" ms"}')
-    echo "$DL|$UL|$PING"
+
+    echo "⚡ DOWNLOAD:     🚀 $DL"
+    echo "⚡ UPLOAD:       🔥 $UL"
+    echo "⚡ LATENCY:      🎯 $PING"
+    echo
 }
 
-# ===== Основная проверка (фоновая, S3 формат) =====
+# ===== Основная проверка (фоновая, S3 формат, без speedtest) =====
 
 run_checks_core() {
 
@@ -218,13 +227,6 @@ run_checks_core() {
     echo "$(echo "$BL" | cut -d '|' -f1)" >> "$TMP"
     echo "$(echo "$BL" | cut -d '|' -f2)" >> "$TMP"
     echo "$(echo "$BL" | cut -d '|' -f3)" >> "$TMP"
-
-    # ===== Speedtest =====
-    echo "[SPEEDTEST]" >> "$TMP"
-    SPEED=$(run_speedtest)
-    echo "$(echo "$SPEED" | cut -d '|' -f1)" >> "$TMP"
-    echo "$(echo "$SPEED" | cut -d '|' -f2)" >> "$TMP"
-    echo "$(echo "$SPEED" | cut -d '|' -f3)" >> "$TMP"
 }
 
 # ===== Анимация с динамическими этапами =====
@@ -241,7 +243,6 @@ run_checks() {
         "Проверка соцсетей..."
         "Проверка магазинов..."
         "Проверка blacklist..."
-        "Тест скорости..."
     )
 
     i=0
@@ -286,11 +287,6 @@ run_checks() {
     BL_SORBS=$(sed -n '39p' "$TMP")
     BL_IP=$(sed -n '40p' "$TMP")
 
-    # Speedtest (3 строки)
-    DL=$(sed -n '42p' "$TMP")
-    UL=$(sed -n '43p' "$TMP")
-    PING=$(sed -n '44p' "$TMP")
-
     rm -f "$TMP"
 
     # ===== Вывод =====
@@ -310,12 +306,6 @@ run_checks() {
     echo "🟢 Доступность:  $YT_MAIN"
     echo "🌍 Регион:       $YT_REGION"
     echo "💎 Premium:      $YT_PREMIUM"
-    echo
-
-    echo -e "${MAGENTA}💎 NETWORK PERFORMANCE 💎${NC}"
-    echo "⚡ DOWNLOAD:     🚀 $DL"
-    echo "⚡ UPLOAD:       🔥 $UL"
-    echo "⚡ LATENCY:      🎯 $PING"
     echo
 
     echo -e "${CYAN}💠 STREAMING MODULE 💠${NC}"
