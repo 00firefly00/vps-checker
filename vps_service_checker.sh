@@ -12,7 +12,19 @@ FAIL="${RED}✖${NC}"
 
 # ====== База ======
 get_ip() { curl -4 -s ipinfo.io/ip; }
-get_region() { curl -4 -s ipinfo.io/country || echo "?"; }
+
+# ====== УСТОЙЧИВЫЙ регион ======
+get_region() {
+    R=$(curl -4 -s --max-time 5 ipinfo.io/country)
+
+    [[ -z "$R" ]] && R=$(curl -4 -s --max-time 5 http://ip-api.com/line/?fields=countryCode)
+    [[ -z "$R" ]] && R=$(curl -4 -s --max-time 5 ifconfig.co/country-iso)
+
+    [[ -z "$R" ]] && R="?"
+
+    echo "$R"
+}
+
 get_asn() { curl -4 -s ipinfo.io/org || echo "Unknown"; }
 
 # ====== Тип IP ======
@@ -28,7 +40,7 @@ get_ip_type() {
     fi
 }
 
-# ====== Спиннер (работает в фоне) ======
+# ====== Спиннер ======
 spinner() {
     local delay=0.15
     local spinstr='+-×'
@@ -64,22 +76,37 @@ check_service() {
     [[ $? -eq 0 ]] && echo "$OK" || echo "$FAIL"
 }
 
-# ====== Основные проверки ======
+# ====== Проверки ======
 run_checks() {
-    NETFLIX_STATUS=$(check_service "https://www.netflix.com"); NETFLIX_REGION=$(get_region)
+    NETFLIX_STATUS=$(check_service "https://www.netflix.com")
+    NETFLIX_REGION=$(get_region)
 
     YT_STATUS=$(check_service "https://www.youtube.com")
     DATA=$(get_youtube_info)
-    YT_REGION=$(echo $DATA | cut -d '|' -f1)
-    YT_PREMIUM=$(echo $DATA | cut -d '|' -f2)
+    YT_REGION=$(echo "$DATA" | cut -d '|' -f1)
+    YT_PREMIUM=$(echo "$DATA" | cut -d '|' -f2)
 
-    DS_STATUS=$(check_service "https://www.disneyplus.com"); DS_REGION=$(get_region)
-    TT_STATUS=$(check_service "https://www.tiktok.com"); TT_REGION=$(get_region)
-    SP_STATUS=$(check_service "https://www.spotify.com"); SP_REGION=$(get_region)
-    CG_STATUS=$(check_service "https://chat.openai.com"); CG_REGION=$(get_region)
-    META_STATUS=$(check_service "https://www.facebook.com"); META_REGION=$(get_region)
+    DS_STATUS=$(check_service "https://www.disneyplus.com")
+    DS_REGION=$(get_region)
+
+    TT_STATUS=$(check_service "https://www.tiktok.com")
+    TT_REGION=$(get_region)
+
+    SP_STATUS=$(check_service "https://www.spotify.com")
+    SP_REGION=$(get_region)
+
+    CG_STATUS=$(check_service "https://chat.openai.com")
+    CG_REGION=$(get_region)
+
+    META_STATUS=$(check_service "https://www.facebook.com")
+    META_REGION=$(get_region)
 
     MS_REGION=$(get_region)
+
+    # защита от пустых значений
+    for var in NETFLIX_REGION YT_REGION DS_REGION TT_REGION SP_REGION CG_REGION META_REGION MS_REGION; do
+        eval "[[ -z \$$var ]] && $var='?'"
+    done
 }
 
 # ====== GEOIP ======
@@ -119,10 +146,12 @@ real_region_check() {
     echo "ChatGPT: $CG_REGION"
 
     REAL=$(printf "%s\n" "$YT_REGION" "$SP_REGION" "$CG_REGION" | sort | uniq -c | sort -nr | head -1 | awk '{print $2}')
+    [[ -z "$REAL" ]] && REAL="?"
+
     echo -e "${GREEN}ФАКТИЧЕСКИЙ РЕГИОН: $REAL${NC}"
 }
 
-# ====== Оценка ======
+# ====== Итог ======
 ip_summary() {
     echo -e "\n${CYAN}==== ОЦЕНКА IP ====${NC}"
 
