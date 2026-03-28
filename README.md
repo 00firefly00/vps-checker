@@ -37,3 +37,4 @@
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/USERNAME/REPO/main/script.sh)
+
