@@ -13,15 +13,11 @@ FAIL="${RED}✖${NC}"
 # ====== База ======
 get_ip() { curl -4 -s ipinfo.io/ip; }
 
-# ====== УСТОЙЧИВЫЙ регион ======
 get_region() {
     R=$(curl -4 -s --max-time 5 ipinfo.io/country)
-
     [[ -z "$R" ]] && R=$(curl -4 -s --max-time 5 http://ip-api.com/line/?fields=countryCode)
     [[ -z "$R" ]] && R=$(curl -4 -s --max-time 5 ifconfig.co/country-iso)
-
     [[ -z "$R" ]] && R="?"
-
     echo "$R"
 }
 
@@ -44,7 +40,6 @@ get_ip_type() {
 spinner() {
     local delay=0.15
     local spinstr='+-×'
-
     while true; do
         for i in $(seq 0 2); do
             printf "\r${CYAN}Проверка... ${spinstr:$i:1}${NC}"
@@ -103,7 +98,6 @@ run_checks() {
 
     MS_REGION=$(get_region)
 
-    # защита от пустых значений
     for var in NETFLIX_REGION YT_REGION DS_REGION TT_REGION SP_REGION CG_REGION META_REGION MS_REGION; do
         eval "[[ -z \$$var ]] && $var='?'"
     done
@@ -111,16 +105,16 @@ run_checks() {
 
 # ====== GEOIP ======
 geoip_check_inline() {
-    G1=$(curl -4 -s ipinfo.io/country)
-    G2=$(curl -4 -s http://ip-api.com/line/?fields=countryCode)
+    G1=$(curl -4 -s ipinfo.io/country); [[ -z "$G1" ]] && G1="N/A"
+    G2=$(curl -4 -s http://ip-api.com/line/?fields=countryCode); [[ -z "$G2" ]] && G2="N/A"
 
     G3=$(curl -4 -s https://ipapi.co/country/)
-    [[ "$G3" == *"error"* || "$G3" == *"{"* ]] && G3="-"
+    [[ "$G3" == *"error"* || "$G3" == *"{"* || -z "$G3" ]] && G3="N/A"
 
-    G4=$(curl -4 -s ifconfig.co/country-iso)
+    G4=$(curl -4 -s ifconfig.co/country-iso); [[ -z "$G4" ]] && G4="N/A"
 
     G5=$(curl -4 -sL https://api.2ip.io/geo.json | grep '"country_code"' | cut -d '"' -f4)
-    [[ -z "$G5" || "$G5" == *"<"* ]] && G5="-"
+    [[ -z "$G5" ]] && G5="N/A"
 
     UNIQUE=$(printf "%s\n" "$G1" "$G2" "$G3" "$G4" "$G5" | sort -u | wc -l)
 
@@ -133,6 +127,7 @@ geoip_check_inline() {
     echo -e "\n${YELLOW}==== GEOIP ====${NC}"
     printf "%-6s %-6s %-6s %-6s %-6s\n" "ipinfo" "ip-api" "ipapi" "ifcfg" "2ip"
     printf "${COLOR}%-6s %-6s %-6s %-6s %-6s${NC}\n" "$G1" "$G2" "$G3" "$G4" "$G5"
+
     echo -e "Итог: ${COLOR}${NOTE}${NC}"
 
     MAIN_REGION="$G1"
@@ -141,9 +136,6 @@ geoip_check_inline() {
 # ====== Реальный регион ======
 real_region_check() {
     echo -e "\n${CYAN}==== РЕАЛЬНЫЙ РЕГИОН ====${NC}"
-    echo "YouTube: $YT_REGION"
-    echo "Spotify: $SP_REGION"
-    echo "ChatGPT: $CG_REGION"
 
     REAL=$(printf "%s\n" "$YT_REGION" "$SP_REGION" "$CG_REGION" | sort | uniq -c | sort -nr | head -1 | awk '{print $2}')
     [[ -z "$REAL" ]] && REAL="?"
@@ -184,21 +176,32 @@ check_blacklist() {
     echo -e "IP: $IP"
 }
 
+# ====== Универсальная строка ======
+print_row() {
+    printf "%-10s %-6b %-6s\n" "$1" "$2" "$3"
+}
+
 # ====== Таблица ======
 print_results() {
-    echo -e "\n${YELLOW}========== РЕЗУЛЬТАТ ==========${NC}"
-    printf "| %-10s | %-10s | %-8s |\n" "Сервис" "Статус" "Регион"
-    printf "+------------+------------+----------+\n"
+    echo -e "\n${YELLOW}====== РЕЗУЛЬТАТ ======${NC}"
 
-    printf "| %-10s | %b | %-8s |\n" "Netflix" "$NETFLIX_STATUS" "$NETFLIX_REGION"
-    printf "| %-10s | %b | %-8s |\n" "YouTube" "$YT_STATUS" "$YT_REGION"
-    printf "| %-10s | %-10s | %-8s |\n" "Premium" "$YT_PREMIUM" ""
-    printf "| %-10s | %b | %-8s |\n" "Disney+" "$DS_STATUS" "$DS_REGION"
-    printf "| %-10s | %b | %-8s |\n" "TikTok" "$TT_STATUS" "$TT_REGION"
-    printf "| %-10s | %b | %-8s |\n" "Spotify" "$SP_STATUS" "$SP_REGION"
-    printf "| %-10s | %b | %-8s |\n" "ChatGPT" "$CG_STATUS" "$CG_REGION"
-    printf "| %-10s | %b | %-8s |\n" "Meta" "$META_STATUS" "$META_REGION"
-    printf "| %-10s | %-10s | %-8s |\n" "Microsoft" "-" "$MS_REGION"
+    printf "%-10s %-6s %-6s\n" "Сервис" "Статус" "Регион"
+    printf "%-10s %-6s %-6s\n" "------" "------" "------"
+
+    print_row "Netflix" "$NETFLIX_STATUS" "$NETFLIX_REGION"
+
+    YT_LABEL="YouTube"
+    [[ "$YT_PREMIUM" == "да" ]] && YT_LABEL="YouTube+"
+    print_row "$YT_LABEL" "$YT_STATUS" "$YT_REGION"
+
+    print_row "Disney+" "$DS_STATUS" "$DS_REGION"
+    print_row "TikTok" "$TT_STATUS" "$TT_REGION"
+    print_row "Spotify" "$SP_STATUS" "$SP_REGION"
+    print_row "ChatGPT" "$CG_STATUS" "$CG_REGION"
+    print_row "Meta" "$META_STATUS" "$META_REGION"
+
+    MS_STATUS="${YELLOW}-${NC}"
+    print_row "Microsoft" "$MS_STATUS" "$MS_REGION"
 
     geoip_check_inline
     real_region_check
