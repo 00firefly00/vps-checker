@@ -36,7 +36,7 @@
 ## ⚙️ Быстрый запуск
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/USERNAME/REPO/main/script.sh)
+bash <(curl -sL https://raw.githubusercontent.com/00firefly00/vps-checker/main/vps_service_checker.sh)
 ```
 # ⚠️ Примечания
 
