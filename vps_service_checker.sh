@@ -8,6 +8,10 @@ BAD="BAD"
 TMP="/tmp/.netcheck.$$"
 trap 'rm -f "$TMP"' EXIT
 
+GREEN="\033[32m"
+RED="\033[31m"
+NC="\033[0m"
+
 spinner() {
     local pid="$1"
     local msg="$2"
@@ -39,7 +43,9 @@ get_region() {
     echo "?"
 }
 
+# -----------------------------
 #  IMPROVED IP TYPE DETECTION
+# -----------------------------
 get_ip_type() {
     local a="$1"
     local rdns="$2"
@@ -73,7 +79,6 @@ get_ip_type() {
         return
     fi
 
-    # Fallback: assume residential
     echo "Residential"
 }
 
@@ -132,26 +137,31 @@ print_geoip() {
     fi
 }
 
-check_streaming() {
-    local url="$1"
-    local block_pattern="$2"
+# -----------------------------
+#  STREAMING CHECKS
+# -----------------------------
+check_streaming_service() {
+    curl -4 -s --max-time 10 "$1" >/dev/null
+    [ $? -eq 0 ] && echo "Доступен" || echo "Недоступен"
+}
 
+check_streaming_premium() {
+    local url="$1"
+    local keyword="$2"
     local resp
+
     resp=$(curl -4 -s --max-time 10 "$url")
 
-    if [ -z "$resp" ]; then
-        echo "$BAD"
-        return
-    fi
-
-    if echo "$resp" | grep -qiE "$block_pattern"; then
-        echo "$BAD"
+    if echo "$resp" | grep -qi "$keyword"; then
+        echo -e "${GREEN}Премиум доступен${NC}"
     else
-        echo "$OK"
+        echo -e "${RED}Премиум недоступен${NC}"
     fi
 }
 
-#  YOUTUBE (ONLY REGION)
+# -----------------------------
+#  YOUTUBE
+# -----------------------------
 check_youtube_main() {
     curl -4 -s --max-time 10 https://www.youtube.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -165,7 +175,9 @@ get_youtube_region() {
     echo "$R"
 }
 
+# -----------------------------
 #  SPOTIFY
+# -----------------------------
 check_spotify_main() {
     curl -4 -s --max-time 10 https://www.spotify.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -204,6 +216,9 @@ check_spotify_premium() {
     esac
 }
 
+# -----------------------------
+#  BLACKLIST
+# -----------------------------
 check_blacklist() {
     local IP REV SPAM SORBS
     IP="$1"
@@ -215,6 +230,9 @@ check_blacklist() {
     echo "$SPAM|$SORBS|$IP"
 }
 
+# -----------------------------
+#  SPEEDTEST
+# -----------------------------
 speed_test() {
     if command -v speedtest >/dev/null 2>&1; then
         speedtest --simple
@@ -227,7 +245,9 @@ speed_test() {
     fi
 }
 
+# -----------------------------
 #  CORE CHECKS
+# -----------------------------
 run_checks_core() {
     local IP ASN RDNS G G1 G2 G3 GS T C BL
 
@@ -261,13 +281,34 @@ run_checks_core() {
     echo "$(get_youtube_region)" >>"$TMP"
 
     echo "[STREAMING]" >>"$TMP"
-    echo "$(check_streaming https://www.netflix.com/title/70143836 'unblocker|proxy')" >>"$TMP"
-    echo "$(check_streaming https://play.hbomax.com 'not in your region')" >>"$TMP"
-    echo "$(check_streaming https://www.hulu.com 'not available in your region')" >>"$TMP"
-    echo "$(check_streaming https://www.primevideo.com 'not available')" >>"$TMP"
-    echo "$(check_streaming https://www.paramountplus.com 'not available')" >>"$TMP"
-    echo "$(check_streaming https://tv.apple.com 'unsupported region')" >>"$TMP"
-    echo "$(check_streaming https://www.crunchyroll.com 'not available')" >>"$TMP"
+
+    # Netflix
+    echo "$(check_streaming_service https://www.netflix.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://www.netflix.com/signup 'Choose your plan')" >>"$TMP"
+
+    # HBO Max
+    echo "$(check_streaming_service https://www.hbomax.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    # Hulu
+    echo "$(check_streaming_service https://www.hulu.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    # Prime Video
+    echo "$(check_streaming_service https://www.primevideo.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    # Paramount+
+    echo "$(check_streaming_service https://www.paramountplus.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    # Apple TV+
+    echo "$(check_streaming_service https://tv.apple.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://tv.apple.com 'Start Free Trial')" >>"$TMP"
+
+    # Crunchyroll
+    echo "$(check_streaming_service https://www.crunchyroll.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://www.crunchyroll.com 'premium')" >>"$TMP"
 
     echo "[SPOTIFY]" >>"$TMP"
     echo "$(check_spotify_main)" >>"$TMP"
@@ -280,7 +321,9 @@ run_checks_core() {
     echo "$(echo "$BL" | cut -d '|' -f3)" >>"$TMP"
 }
 
+# -----------------------------
 #  OUTPUT
+# -----------------------------
 run_checks() {
     run_checks_core &
     local pid=$!
@@ -295,7 +338,7 @@ run_checks() {
 
     local IP ASN REG TYPE CLASS GS G1 G2 G3
     local YT_MAIN YT_R
-    local ST0 ST1 ST2 ST3 ST4 ST5 ST6
+    local S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 S12 S13 S14
     local SP_MAIN SP_PREM
     local BL_SP BL_SO BL_IP
 
@@ -312,20 +355,28 @@ run_checks() {
     YT_MAIN=$(sed -n '12p' "$TMP")
     YT_R=$(sed -n '13p' "$TMP")
 
-    ST0=$(sed -n '15p' "$TMP")
-    ST1=$(sed -n '16p' "$TMP")
-    ST2=$(sed -n '17p' "$TMP")
-    ST3=$(sed -n '18p' "$TMP")
-    ST4=$(sed -n '19p' "$TMP")
-    ST5=$(sed -n '20p' "$TMP")
-    ST6=$(sed -n '21p' "$TMP")
+    # Streaming
+    S1=$(sed -n '15p' "$TMP")
+    S2=$(sed -n '16p' "$TMP")
+    S3=$(sed -n '17p' "$TMP")
+    S4=$(sed -n '18p' "$TMP")
+    S5=$(sed -n '19p' "$TMP")
+    S6=$(sed -n '20p' "$TMP")
+    S7=$(sed -n '21p' "$TMP")
+    S8=$(sed -n '22p' "$TMP")
+    S9=$(sed -n '23p' "$TMP")
+    S10=$(sed -n '24p' "$TMP")
+    S11=$(sed -n '25p' "$TMP")
+    S12=$(sed -n '26p' "$TMP")
+    S13=$(sed -n '27p' "$TMP")
+    S14=$(sed -n '28p' "$TMP")
 
-    SP_MAIN=$(sed -n '23p' "$TMP")
-    SP_PREM=$(sed -n '24p' "$TMP")
+    SP_MAIN=$(sed -n '30p' "$TMP")
+    SP_PREM=$(sed -n '31p' "$TMP")
 
-    BL_SP=$(sed -n '26p' "$TMP")
-    BL_SO=$(sed -n '27p' "$TMP")
-    BL_IP=$(sed -n '28p' "$TMP")
+    BL_SP=$(sed -n '33p' "$TMP")
+    BL_SO=$(sed -n '34p' "$TMP")
+    BL_IP=$(sed -n '35p' "$TMP")
 
     echo "IP INFORMATION"
     echo "IP:      $IP"
@@ -342,13 +393,13 @@ run_checks() {
     echo
 
     echo "STREAMING"
-    echo "Netflix:      $ST0"
-    echo "HBO Max:      $ST1"
-    echo "Hulu:         $ST2"
-    echo "Prime Video:  $ST3"
-    echo "Paramount+:   $ST4"
-    echo "Apple TV+:    $ST5"
-    echo "Crunchyroll:  $ST6"
+    echo "Netflix:        $S1 | $S2"
+    echo "HBO Max:        $S3 | $S4"
+    echo "Hulu:           $S5 | $S6"
+    echo "Prime Video:    $S7 | $S8"
+    echo "Paramount+:     $S9 | $S10"
+    echo "Apple TV+:      $S11 | $S12"
+    echo "Crunchyroll:    $S13 | $S14"
     echo
 
     echo "SPOTIFY"
