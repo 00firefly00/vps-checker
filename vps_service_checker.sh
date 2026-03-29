@@ -39,44 +39,71 @@ get_region() {
     echo "?"
 }
 
+#  IMPROVED IP TYPE DETECTION
 get_ip_type() {
     local a="$1"
-    case "$a" in
-        *Mobile*|*LTE*|*Wireless*|*T-Mobile*|*Verizon*|*Vodafone*|*Tele2*|*MTS*|*Beeline*|*Megafon*)
-            echo "Mobile" ;;
-        *Residential*|*Home*|*ISP*|*Telecom*)
-            echo "Residential" ;;
-        *OVH*|*Hetzner*|*DigitalOcean*|*Linode*|*AWS*|*Google*|*Azure*|*Contabo*|*Vultr*|*Leaseweb*|*M247*|*Choopa*|*Online*|*Scaleway*|*Netcup*)
-            echo "Datacenter" ;;
-        *)
-            echo "Unknown" ;;
-    esac
+    local rdns="$2"
+
+    # Datacenter keywords
+    if echo "$a" | grep -qiE "OVH|Hetzner|DigitalOcean|Linode|AWS|Google|Azure|Contabo|Vultr|Leaseweb|M247|Choopa|Scaleway|Netcup|Oracle|Alibaba|Tencent|Kamatera|G-Core|Cloudflare|Fastly|Akamai"; then
+        echo "Datacenter"
+        return
+    fi
+
+    # Mobile keywords
+    if echo "$a" | grep -qiE "T-Mobile|Verizon|Vodafone|Tele2|MTS|Beeline|Megafon|AT&T|Sprint|Orange|Claro|Telia|Telenor|Rogers|Bell|Telus"; then
+        echo "Mobile"
+        return
+    fi
+
+    # Residential keywords
+    if echo "$a" | grep -qiE "Comcast|Spectrum|Cox|Xfinity|BT|Virgin|Sky|Deutsche|Telekom|Orange Home|Rostelecom|Home|Residential|ISP"; then
+        echo "Residential"
+        return
+    fi
+
+    # Reverse DNS hints
+    if echo "$rdns" | grep -qiE "static|dynamic|pool"; then
+        echo "Residential"
+        return
+    fi
+
+    if echo "$rdns" | grep -qiE "server|vps|cloud|hosting"; then
+        echo "Datacenter"
+        return
+    fi
+
+    # Fallback: assume residential
+    echo "Residential"
 }
 
 classify_ip() {
-    local t="$1" g="$2" a="$3"
-    if [ "$t" = "Residential" ]; then
-        echo "Residential (home ISP)"
-    elif [ "$t" = "Mobile" ]; then
-        echo "Mobile (cellular network)"
-    elif [ "$t" = "Datacenter" ]; then
-        if [ "$g" = "mismatch" ]; then
-            echo "VPN/Proxy (datacenter, GEO mismatch)"
-        else
-            echo "Hosting / Datacenter"
-        fi
-    else
-        case "$a" in
-            *VPN*|*Proxy*|*Hosting*|*Cloud*|*Server*)
-                echo "VPN/Proxy (hosting ASN)" ;;
-            *)
-                if [ "$g" = "mismatch" ]; then
-                    echo "Suspicious / Mixed (GEO mismatch)"
-                else
-                    echo "Unknown / Mixed"
-                fi ;;
-        esac
-    fi
+    local t="$1" g="$2" a="$3" rdns="$4"
+
+    case "$t" in
+        Residential)
+            echo "Residential (home ISP)"
+            ;;
+        Mobile)
+            echo "Mobile (cellular network)"
+            ;;
+        Datacenter)
+            if [ "$g" = "mismatch" ]; then
+                echo "VPN/Proxy (datacenter, GEO mismatch)"
+            else
+                echo "Hosting / Datacenter"
+            fi
+            ;;
+        *)
+            if echo "$rdns" | grep -qiE "server|vps|cloud|hosting"; then
+                echo "Hosting / Datacenter"
+            elif [ "$g" = "mismatch" ]; then
+                echo "Suspicious / Mixed (GEO mismatch)"
+            else
+                echo "Residential (fallback)"
+            fi
+            ;;
+    esac
 }
 
 geoip_check() {
@@ -124,12 +151,12 @@ check_streaming() {
     fi
 }
 
+#  YOUTUBE (ONLY REGION)
 check_youtube_main() {
     curl -4 -s --max-time 10 https://www.youtube.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
 }
 
-# ✔ Только регион YouTube
 get_youtube_region() {
     local P R
     P=$(curl -4 -s --max-time 10 "https://www.youtube.com/?hl=en")
@@ -138,7 +165,7 @@ get_youtube_region() {
     echo "$R"
 }
 
-# ✔ Spotify
+#  SPOTIFY
 check_spotify_main() {
     curl -4 -s --max-time 10 https://www.spotify.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -200,11 +227,13 @@ speed_test() {
     fi
 }
 
+#  CORE CHECKS
 run_checks_core() {
-    local IP ASN G G1 G2 G3 GS T C BL
+    local IP ASN RDNS G G1 G2 G3 GS T C BL
 
     IP=$(get_ip)
     ASN=$(get_asn)
+    RDNS=$(dig -x "$IP" +short 2>/dev/null)
 
     echo "[IP]" >"$TMP"
     echo "$IP" >>"$TMP"
@@ -217,8 +246,8 @@ run_checks_core() {
     G3=$(echo "$G" | cut -d '|' -f3)
     GS=$(echo "$G" | cut -d '|' -f4)
 
-    T=$(get_ip_type "$ASN")
-    C=$(classify_ip "$T" "$GS" "$ASN")
+    T=$(get_ip_type "$ASN" "$RDNS")
+    C=$(classify_ip "$T" "$GS" "$ASN" "$RDNS")
 
     echo "$T" >>"$TMP"
     echo "$C" >>"$TMP"
@@ -251,6 +280,7 @@ run_checks_core() {
     echo "$(echo "$BL" | cut -d '|' -f3)" >>"$TMP"
 }
 
+#  OUTPUT
 run_checks() {
     run_checks_core &
     local pid=$!
