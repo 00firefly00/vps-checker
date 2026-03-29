@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # ============================================
-#   🎮 ULTRA IP & STREAMING CHECKER v4.3 🎮
-#   Стиль: C3 + Y3‑B + S3 + G3‑B
-#   Анимация: L1 (одной строкой, динамическая)
-#   Временный файл: /tmp/.netcheck.$$
-#   Формат: S3 (фиксированные строки)
-#   Speedtest — только отдельный пункт меню
+#   🎮 ULTRA IP & STREAMING CHECKER v4.4 🎮
+#   Speedtest исправлен
+#   GEOIP выводится таблицей при mismatch
+#   Speedtest вынесен в отдельный пункт
+#   Формат S3 (фиксированные строки)
 # ============================================
 
 RED='\033[0;31m'
@@ -148,15 +147,20 @@ check_blacklist() {
     echo "$SPAM|$SORBS|$IP"
 }
 
+# ===== Speedtest (исправленный) =====
+
 run_speedtest_only() {
     clear
     echo -e "${MAGENTA}💎 SPEEDTEST MODULE 💎${NC}"
     echo "════════════════════════════════════"
+
     RESULT=$(curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 - 2>/dev/null)
 
     DL=$(echo "$RESULT" | grep "Download" | awk '{print $2" "$3}')
     UL=$(echo "$RESULT" | grep "Upload" | awk '{print $2" "$3}')
-    PING=$(echo "$RESULT" | grep "Hosted" | awk '{print $6" ms"}')
+
+    # УНИВЕРСАЛЬНЫЙ ПАРСЕР LATENCY
+    PING=$(echo "$RESULT" | grep -oE '[0-9]+(\.[0-9]+)? ms' | head -1)
 
     echo "⚡ DOWNLOAD:     🚀 $DL"
     echo "⚡ UPLOAD:       🔥 $UL"
@@ -164,7 +168,46 @@ run_speedtest_only() {
     echo
 }
 
-# ===== Основная проверка (фоновая, S3 формат, без speedtest) =====
+# ===== GEOIP вывод =====
+
+print_geoip() {
+    local G1="$1"
+    local G2="$2"
+    local G3="$3"
+    local STATUS="$4"
+
+    if [[ "$STATUS" == "clean" ]]; then
+        echo "🛰 GEOIP:        $G1"
+    else
+        echo "🛰 GEOIP mismatch:"
+        echo
+        printf "%-15s %-10s\n" "Service" "Region"
+        printf "%-15s %-10s\n" "ipinfo.io" "$G1"
+        printf "%-15s %-10s\n" "ip-api.com" "$G2"
+        printf "%-15s %-10s\n" "ifconfig.co" "$G3"
+        echo
+    fi
+}
+
+# ===== YouTube Only =====
+
+run_youtube_only() {
+    clear
+    echo -e "${MAGENTA}💠 YOUTUBE MODULE 💠${NC}"
+    echo "════════════════════════════════════"
+
+    MAIN=$(check_youtube_main)
+    YT_DATA=$(get_youtube_info)
+    REGION=$(echo "$YT_DATA" | cut -d '|' -f1)
+    PREMIUM=$(echo "$YT_DATA" | cut -d '|' -f2)
+
+    echo "🟢 Доступность:  $MAIN"
+    echo "🌍 Регион:       $REGION"
+    echo "💎 Premium:      $PREMIUM"
+    echo
+}
+
+# ===== Основная проверка =====
 
 run_checks_core() {
 
@@ -174,6 +217,9 @@ run_checks_core() {
     echo "$(get_asn)" >> "$TMP"
     echo "$(get_region)" >> "$TMP"
     GEO=$(geoip_check)
+    G1=$(echo "$GEO" | cut -d '|' -f1)
+    G2=$(echo "$GEO" | cut -d '|' -f2)
+    G3=$(echo "$GEO" | cut -d '|' -f3)
     GEO_STATUS=$(echo "$GEO" | cut -d '|' -f4)
     TYPE=$(get_ip_type "$(get_asn)")
     CLASS=$(classify_ip "$TYPE" "$GEO_STATUS" "$(get_asn)")
@@ -229,7 +275,7 @@ run_checks_core() {
     echo "$(echo "$BL" | cut -d '|' -f3)" >> "$TMP"
 }
 
-# ===== Анимация с динамическими этапами =====
+# ===== Анимация =====
 
 run_checks() {
     run_checks_core &
@@ -257,7 +303,6 @@ run_checks() {
 
     # ===== Чтение результатов =====
 
-    # IP (6 строк)
     IP=$(sed -n '2p' "$TMP")
     ASN=$(sed -n '3p' "$TMP")
     REGION=$(sed -n '4p' "$TMP")
@@ -265,24 +310,15 @@ run_checks() {
     CLASS=$(sed -n '6p' "$TMP")
     GEO_STATUS=$(sed -n '7p' "$TMP")
 
-    # YouTube (3 строки)
     YT_MAIN=$(sed -n '9p' "$TMP")
     YT_REGION=$(sed -n '10p' "$TMP")
     YT_PREMIUM=$(sed -n '11p' "$TMP")
 
-    # Streaming (7 строк)
     STREAM=($(sed -n '13,19p' "$TMP"))
-
-    # Gaming (6 строк)
     GAME=($(sed -n '21,26p' "$TMP"))
-
-    # Social (5 строк)
     SOCIAL=($(sed -n '28,32p' "$TMP"))
-
-    # Stores (3 строки)
     STORES=($(sed -n '34,36p' "$TMP"))
 
-    # Blacklist (3 строки)
     BL_SPAM=$(sed -n '38p' "$TMP")
     BL_SORBS=$(sed -n '39p' "$TMP")
     BL_IP=$(sed -n '40p' "$TMP")
@@ -299,8 +335,8 @@ run_checks() {
     echo "🧬 Класс IP:     $CLASS"
     echo "🏢 ASN:          $ASN"
     echo "📌 Регион:       $REGION"
-    echo "🛰 GEOIP:        $GEO_STATUS"
-    echo
+
+    print_geoip "$G1" "$G2" "$G3" "$GEO_STATUS"
 
     echo -e "${MAGENTA}💠 YOUTUBE MODULE 💠${NC}"
     echo "🟢 Доступность:  $YT_MAIN"
