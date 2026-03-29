@@ -124,24 +124,6 @@ check_streaming() {
     fi
 }
 
-check_meta_worlds() {
-    local resp
-    resp=$(curl -4 -s --max-time 10 \
-        -H "User-Agent: Mozilla/5.0" \
-        https://horizon.meta.com/worlds)
-
-    if [ -z "$resp" ]; then
-        echo "$BAD"
-        return
-    fi
-
-    if echo "$resp" | grep -qiE "not available in your region|not supported|unavailable"; then
-        echo "$BAD"
-    else
-        echo "$OK"
-    fi
-}
-
 check_youtube_main() {
     curl -4 -s --max-time 10 https://www.youtube.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -152,16 +134,41 @@ get_youtube_info() {
     P=$(curl -4 -s --max-time 10 "https://www.youtube.com/premium?hl=en")
     R=$(echo "$P" | grep -o '"GL":"[A-Z][A-Z]"' | head -1 | cut -d '"' -f4)
     [ -z "$R" ] && R=$(get_region)
-    if echo "$P" | grep -q "yt-premium-header-renderer"; then
-        S="FULL ACCESS"
-    elif echo "$P" | grep -q "Premium is not available"; then
+
+    if echo "$P" | grep -q "Premium is not available"; then
         S="NOT AVAILABLE"
+    elif echo "$P" | grep -q "yt-premium-header-renderer"; then
+        S="FULL ACCESS"
     elif echo "$P" | grep -q "Try it free"; then
         S="FULL ACCESS"
     else
         S="UNKNOWN"
     fi
+
     echo "$R|$S"
+}
+
+check_spotify_main() {
+    curl -4 -s --max-time 10 https://www.spotify.com >/dev/null
+    [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
+}
+
+check_spotify_premium() {
+    local P
+    P=$(curl -4 -s --max-time 10 "https://www.spotify.com/premium/")
+
+    if [ -z "$P" ]; then
+        echo "UNKNOWN"
+        return
+    fi
+
+    if echo "$P" | grep -qi "not available in your country"; then
+        echo "NOT AVAILABLE"
+    elif echo "$P" | grep -qiE "Get Premium|Try Premium"; then
+        echo "AVAILABLE"
+    else
+        echo "UNKNOWN"
+    fi
 }
 
 check_blacklist() {
@@ -173,6 +180,18 @@ check_blacklist() {
     [ -z "$SPAM" ] && SPAM="CLEAN" || SPAM="LISTED"
     [ -z "$SORBS" ] && SORBS="CLEAN" || SORBS="LISTED"
     echo "$SPAM|$SORBS|$IP"
+}
+
+speed_test() {
+    if command -v speedtest >/dev/null 2>&1; then
+        speedtest --simple
+    elif command -v speedtest-cli >/dev/null 2>&1; then
+        speedtest-cli --simple
+    else
+        echo "speedtest-cli не найден, выполняю простой тест..."
+        echo "Download test:"
+        wget -4 -O /dev/null https://speed.hetzner.de/100MB.bin 2>&1 | grep -o '[0-9.]\+ [KM]*B/s'
+    fi
 }
 
 run_checks_core() {
@@ -217,8 +236,9 @@ run_checks_core() {
     echo "$(check_streaming https://tv.apple.com 'unsupported region')" >>"$TMP"
     echo "$(check_streaming https://www.crunchyroll.com 'not available')" >>"$TMP"
 
-    echo "[META]" >>"$TMP"
-    echo "$(check_meta_worlds)" >>"$TMP"
+    echo "[SPOTIFY]" >>"$TMP"
+    echo "$(check_spotify_main)" >>"$TMP"
+    echo "$(check_spotify_premium)" >>"$TMP"
 
     echo "[BLACKLIST]" >>"$TMP"
     BL=$(check_blacklist "$IP")
@@ -230,7 +250,7 @@ run_checks_core() {
 run_checks() {
     run_checks_core &
     local pid=$!
-    local steps=("IP" "YouTube" "Streaming" "Meta" "Blacklist")
+    local steps=("IP" "YouTube" "Streaming" "Spotify" "Blacklist")
     local i=0
     while kill -0 "$pid" 2>/dev/null; do
         spinner "$pid" "${steps[i]}"
@@ -242,7 +262,7 @@ run_checks() {
     local IP ASN REG TYPE CLASS GS G1 G2 G3
     local YT_MAIN YT_R YT_P
     local ST0 ST1 ST2 ST3 ST4 ST5 ST6
-    local META
+    local SP_MAIN SP_PREM
     local BL_SP BL_SO BL_IP
 
     IP=$(sed -n '2p' "$TMP")
@@ -267,11 +287,12 @@ run_checks() {
     ST5=$(sed -n '21p' "$TMP")
     ST6=$(sed -n '22p' "$TMP")
 
-    META=$(sed -n '24p' "$TMP")
+    SP_MAIN=$(sed -n '24p' "$TMP")
+    SP_PREM=$(sed -n '25p' "$TMP")
 
-    BL_SP=$(sed -n '26p' "$TMP")
-    BL_SO=$(sed -n '27p' "$TMP")
-    BL_IP=$(sed -n '28p' "$TMP")
+    BL_SP=$(sed -n '27p' "$TMP")
+    BL_SO=$(sed -n '28p' "$TMP")
+    BL_IP=$(sed -n '29p' "$TMP")
 
     echo "IP INFORMATION"
     echo "IP:      $IP"
@@ -298,8 +319,9 @@ run_checks() {
     echo "Crunchyroll:  $ST6"
     echo
 
-    echo "META"
-    echo "Horizon Worlds: $META"
+    echo "SPOTIFY"
+    echo "Service:  $SP_MAIN"
+    echo "Premium:  $SP_PREM"
     echo
 
     echo "BLACKLIST"
@@ -311,12 +333,14 @@ run_checks() {
 
 while true; do
     echo "1) Full check"
-    echo "2) Exit"
+    echo "2) Speed test"
+    echo "3) Exit"
     printf "> "
     read -r C
     case "$C" in
         1) run_checks ;;
-        2) exit 0 ;;
+        2) speed_test ;;
+        3) exit 0 ;;
         *) echo "Invalid choice" ;;
     esac
 done
