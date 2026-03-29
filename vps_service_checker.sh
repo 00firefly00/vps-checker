@@ -129,7 +129,7 @@ check_youtube_main() {
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
 }
 
-# ✔ Новый метод: получаем регион YouTube из главной страницы
+# ✔ Только регион YouTube
 get_youtube_region() {
     local P R
     P=$(curl -4 -s --max-time 10 "https://www.youtube.com/?hl=en")
@@ -138,26 +138,7 @@ get_youtube_region() {
     echo "$R"
 }
 
-# ✔ Новый метод проверки YouTube Premium
-check_youtube_premium() {
-    local P
-    P=$(curl -4 -s --max-time 10 "https://www.youtube.com/premium")
-
-    if [ -z "$P" ]; then
-        echo "UNKNOWN"
-        return
-    fi
-
-    if echo "$P" | grep -q "premium_unavailable_country"; then
-        echo "NOT AVAILABLE"
-    elif echo "$P" | grep -q "Premium"; then
-        echo "AVAILABLE"
-    else
-        echo "UNKNOWN"
-    fi
-}
-
-# ✔ Новый точный метод проверки Spotify Premium
+# ✔ Spotify
 check_spotify_main() {
     curl -4 -s --max-time 10 https://www.spotify.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -249,7 +230,6 @@ run_checks_core() {
     echo "[YOUTUBE]" >>"$TMP"
     echo "$(check_youtube_main)" >>"$TMP"
     echo "$(get_youtube_region)" >>"$TMP"
-    echo "$(check_youtube_premium)" >>"$TMP"
 
     echo "[STREAMING]" >>"$TMP"
     echo "$(check_streaming https://www.netflix.com/title/70143836 'unblocker|proxy')" >>"$TMP"
@@ -284,7 +264,7 @@ run_checks() {
     clear
 
     local IP ASN REG TYPE CLASS GS G1 G2 G3
-    local YT_MAIN YT_R YT_PREM
+    local YT_MAIN YT_R
     local ST0 ST1 ST2 ST3 ST4 ST5 ST6
     local SP_MAIN SP_PREM
     local BL_SP BL_SO BL_IP
@@ -301,22 +281,21 @@ run_checks() {
 
     YT_MAIN=$(sed -n '12p' "$TMP")
     YT_R=$(sed -n '13p' "$TMP")
-    YT_PREM=$(sed -n '14p' "$TMP")
 
-    ST0=$(sed -n '16p' "$TMP")
-    ST1=$(sed -n '17p' "$TMP")
-    ST2=$(sed -n '18p' "$TMP")
-    ST3=$(sed -n '19p' "$TMP")
-    ST4=$(sed -n '20p' "$TMP")
-    ST5=$(sed -n '21p' "$TMP")
-    ST6=$(sed -n '22p' "$TMP")
+    ST0=$(sed -n '15p' "$TMP")
+    ST1=$(sed -n '16p' "$TMP")
+    ST2=$(sed -n '17p' "$TMP")
+    ST3=$(sed -n '18p' "$TMP")
+    ST4=$(sed -n '19p' "$TMP")
+    ST5=$(sed -n '20p' "$TMP")
+    ST6=$(sed -n '21p' "$TMP")
 
-    SP_MAIN=$(sed -n '24p' "$TMP")
-    SP_PREM=$(sed -n '25p' "$TMP")
+    SP_MAIN=$(sed -n '23p' "$TMP")
+    SP_PREM=$(sed -n '24p' "$TMP")
 
-    BL_SP=$(sed -n '27p' "$TMP")
-    BL_SO=$(sed -n '28p' "$TMP")
-    BL_IP=$(sed -n '29p' "$TMP")
+    BL_SP=$(sed -n '26p' "$TMP")
+    BL_SO=$(sed -n '27p' "$TMP")
+    BL_IP=$(sed -n '28p' "$TMP")
 
     echo "IP INFORMATION"
     echo "IP:      $IP"
@@ -330,7 +309,6 @@ run_checks() {
     echo "YOUTUBE"
     echo "Status:  $YT_MAIN"
     echo "Region:  $YT_R"
-    echo "Premium: $YT_PREM"
     echo
 
     echo "STREAMING"
