@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # ============================================
-#   🎮 ULTRA IP & STREAMING CHECKER v4.4 🎮
-#   Speedtest исправлен
-#   GEOIP выводится таблицей при mismatch
-#   Speedtest вынесен в отдельный пункт
-#   Формат S3 (фиксированные строки)
+#   🎮 ULTRA IP & STREAMING CHECKER v4.7 🎮
+#   - Исправленный speedtest (latency)
+#   - GEOIP: таблица при mismatch
+#   - META module (Facebook/Instagram/WhatsApp/Threads)
+#   - Проверка покупки подписки стримингов
+#   - Формат S3 (фиксированные строки)
 # ============================================
 
 RED='\033[0;31m'
@@ -39,7 +40,7 @@ spinner() {
     tput cnorm 2>/dev/null
 }
 
-# ===== Основные функции =====
+# ===== Базовые функции =====
 
 get_ip() { curl -4 -s ipinfo.io/ip; }
 get_asn() { curl -4 -s ipinfo.io/org; }
@@ -147,7 +148,24 @@ check_blacklist() {
     echo "$SPAM|$SORBS|$IP"
 }
 
-# ===== Speedtest (исправленный) =====
+check_subscription() {
+    local url="$1"
+    local page
+    page=$(curl -4 -s --max-time 10 "$url")
+
+    if [[ -z "$page" ]]; then
+        echo "UNKNOWN"
+        return
+    fi
+
+    if echo "$page" | grep -qiE "not available|unavailable in your region|not available in your country|unsupported location|service is not available"; then
+        echo "BLOCKED"
+    else
+        echo "AVAILABLE"
+    fi
+}
+
+# ===== Speedtest =====
 
 run_speedtest_only() {
     clear
@@ -158,8 +176,6 @@ run_speedtest_only() {
 
     DL=$(echo "$RESULT" | grep "Download" | awk '{print $2" "$3}')
     UL=$(echo "$RESULT" | grep "Upload" | awk '{print $2" "$3}')
-
-    # УНИВЕРСАЛЬНЫЙ ПАРСЕР LATENCY
     PING=$(echo "$RESULT" | grep -oE '[0-9]+(\.[0-9]+)? ms' | head -1)
 
     echo "⚡ DOWNLOAD:     🚀 $DL"
@@ -207,34 +223,40 @@ run_youtube_only() {
     echo
 }
 
-# ===== Основная проверка =====
+# ===== Основная проверка (S3) =====
 
 run_checks_core() {
 
-    # ===== IP =====
+    # IP
     echo "[IP]" > "$TMP"
     echo "$(get_ip)" >> "$TMP"
     echo "$(get_asn)" >> "$TMP"
     echo "$(get_region)" >> "$TMP"
+
     GEO=$(geoip_check)
     G1=$(echo "$GEO" | cut -d '|' -f1)
     G2=$(echo "$GEO" | cut -d '|' -f2)
     G3=$(echo "$GEO" | cut -d '|' -f3)
     GEO_STATUS=$(echo "$GEO" | cut -d '|' -f4)
+
     TYPE=$(get_ip_type "$(get_asn)")
     CLASS=$(classify_ip "$TYPE" "$GEO_STATUS" "$(get_asn)")
+
     echo "$TYPE" >> "$TMP"
     echo "$CLASS" >> "$TMP"
     echo "$GEO_STATUS" >> "$TMP"
+    echo "$G1" >> "$TMP"
+    echo "$G2" >> "$TMP"
+    echo "$G3" >> "$TMP"
 
-    # ===== YouTube =====
+    # YouTube
     echo "[YOUTUBE]" >> "$TMP"
     echo "$(check_youtube_main)" >> "$TMP"
     YT_DATA=$(get_youtube_info)
     echo "$(echo "$YT_DATA" | cut -d '|' -f1)" >> "$TMP"
     echo "$(echo "$YT_DATA" | cut -d '|' -f2)" >> "$TMP"
 
-    # ===== Streaming =====
+    # Streaming
     echo "[STREAMING]" >> "$TMP"
     echo "$(check_service https://www.netflix.com)" >> "$TMP"
     echo "$(check_service https://www.hbomax.com)" >> "$TMP"
@@ -244,7 +266,17 @@ run_checks_core() {
     echo "$(check_service https://tv.apple.com)" >> "$TMP"
     echo "$(check_service https://www.crunchyroll.com)" >> "$TMP"
 
-    # ===== Gaming =====
+    # Streaming subscriptions
+    echo "[STREAMING_SUB]" >> "$TMP"
+    echo "$(check_subscription https://www.netflix.com/signup)" >> "$TMP"
+    echo "$(check_subscription https://www.hbomax.com/subscribe)" >> "$TMP"
+    echo "$(check_subscription https://signup.hulu.com/plans)" >> "$TMP"
+    echo "$(check_subscription https://www.primevideo.com/signup)" >> "$TMP"
+    echo "$(check_subscription https://www.paramountplus.com/account/signup/)" >> "$TMP"
+    echo "$(check_subscription https://tv.apple.com/subscribe)" >> "$TMP"
+    echo "$(check_subscription https://www.crunchyroll.com/premium)" >> "$TMP"
+
+    # Gaming
     echo "[GAMING]" >> "$TMP"
     echo "$(check_service https://store.steampowered.com)" >> "$TMP"
     echo "$(check_service https://store.epicgames.com)" >> "$TMP"
@@ -253,21 +285,25 @@ run_checks_core() {
     echo "$(check_service https://battle.net)" >> "$TMP"
     echo "$(check_service https://socialclub.rockstargames.com)" >> "$TMP"
 
-    # ===== Social =====
+    # Social (META + others)
     echo "[SOCIAL]" >> "$TMP"
+    echo "$(check_service https://www.facebook.com)" >> "$TMP"
+    echo "$(check_service https://www.messenger.com)" >> "$TMP"
     echo "$(check_service https://www.instagram.com)" >> "$TMP"
-    echo "$(check_service https://x.com)" >> "$TMP"
+    echo "$(check_service https://www.threads.net)" >> "$TMP"
     echo "$(check_service https://web.whatsapp.com)" >> "$TMP"
+    echo "$(check_service https://business.facebook.com)" >> "$TMP"
+    echo "$(check_service https://x.com)" >> "$TMP"
     echo "$(check_service https://www.reddit.com)" >> "$TMP"
     echo "$(check_service https://web.telegram.org)" >> "$TMP"
 
-    # ===== Stores =====
+    # Stores
     echo "[STORES]" >> "$TMP"
     echo "$(check_service https://www.amazon.com)" >> "$TMP"
     echo "$(check_service https://www.ebay.com)" >> "$TMP"
     echo "$(check_service https://www.aliexpress.com)" >> "$TMP"
 
-    # ===== Blacklist =====
+    # Blacklist
     echo "[BLACKLIST]" >> "$TMP"
     BL=$(check_blacklist)
     echo "$(echo "$BL" | cut -d '|' -f1)" >> "$TMP"
@@ -275,7 +311,7 @@ run_checks_core() {
     echo "$(echo "$BL" | cut -d '|' -f3)" >> "$TMP"
 }
 
-# ===== Анимация =====
+# ===== Обёртка с анимацией =====
 
 run_checks() {
     run_checks_core &
@@ -285,6 +321,7 @@ run_checks() {
         "Проверка IP..."
         "Проверка YouTube..."
         "Проверка стримингов..."
+        "Проверка подписок..."
         "Проверка игровых сервисов..."
         "Проверка соцсетей..."
         "Проверка магазинов..."
@@ -298,53 +335,63 @@ run_checks() {
     done
 
     wait "$pid"
-
     clear
 
-    # ===== Чтение результатов =====
-
+    # Чтение IP блока
     IP=$(sed -n '2p' "$TMP")
     ASN=$(sed -n '3p' "$TMP")
     REGION=$(sed -n '4p' "$TMP")
     TYPE=$(sed -n '5p' "$TMP")
     CLASS=$(sed -n '6p' "$TMP")
     GEO_STATUS=$(sed -n '7p' "$TMP")
+    G1=$(sed -n '8p' "$TMP")
+    G2=$(sed -n '9p' "$TMP")
+    G3=$(sed -n '10p' "$TMP")
 
-    YT_MAIN=$(sed -n '9p' "$TMP")
-    YT_REGION=$(sed -n '10p' "$TMP")
-    YT_PREMIUM=$(sed -n '11p' "$TMP")
+    # YouTube
+    YT_MAIN=$(sed -n '12p' "$TMP")
+    YT_REGION=$(sed -n '13p' "$TMP")
+    YT_PREMIUM=$(sed -n '14p' "$TMP")
 
-    STREAM=($(sed -n '13,19p' "$TMP"))
-    GAME=($(sed -n '21,26p' "$TMP"))
-    SOCIAL=($(sed -n '28,32p' "$TMP"))
-    STORES=($(sed -n '34,36p' "$TMP"))
+    # Streaming
+    STREAM=($(sed -n '16,22p' "$TMP"))
 
-    BL_SPAM=$(sed -n '38p' "$TMP")
-    BL_SORBS=$(sed -n '39p' "$TMP")
-    BL_IP=$(sed -n '40p' "$TMP")
+    # Streaming subscriptions
+    STREAM_SUB=($(sed -n '24,30p' "$TMP"))
+
+    # Gaming
+    GAME=($(sed -n '32,37p' "$TMP"))
+
+    # Social
+    SOCIAL=($(sed -n '39,47p' "$TMP"))
+
+    # Stores
+    STORES=($(sed -n '49,51p' "$TMP"))
+
+    # Blacklist
+    BL_SPAM=$(sed -n '53p' "$TMP")
+    BL_SORBS=$(sed -n '54p' "$TMP")
+    BL_IP=$(sed -n '55p' "$TMP")
 
     rm -f "$TMP"
 
-    # ===== Вывод =====
-
-    echo -e "${MAGENTA}💠💠💠 SYSTEM SCAN COMPLETE 💠💠💠${NC}"
+    echo -e "${MAGENTA}✧✧ SYSTEM SCAN COMPLETE ✧✧${NC}"
     echo
 
-    echo -e "${CYAN}💠 IP INFORMATION 💠${NC}"
-    echo "🌐 Тип IP:       $TYPE"
-    echo "🧬 Класс IP:     $CLASS"
-    echo "🏢 ASN:          $ASN"
-    echo "📌 Регион:       $REGION"
-
+    echo -e "${CYAN}✧ IP INFORMATION ✧${NC}"
+    echo "Тип IP:          $TYPE"
+    echo "Класс IP:        $CLASS"
+    echo "ASN:             $ASN"
+    echo "Регион:          $REGION"
     print_geoip "$G1" "$G2" "$G3" "$GEO_STATUS"
 
-    echo -e "${MAGENTA}💠 YOUTUBE MODULE 💠${NC}"
-    echo "🟢 Доступность:  $YT_MAIN"
-    echo "🌍 Регион:       $YT_REGION"
-    echo "💎 Premium:      $YT_PREMIUM"
+    echo -e "${MAGENTA}✧ YOUTUBE MODULE ✧${NC}"
+    echo "Доступность:     $YT_MAIN"
+    echo "Регион:          $YT_REGION"
+    echo "Premium:         $YT_PREMIUM"
     echo
 
-    echo -e "${CYAN}💠 STREAMING MODULE 💠${NC}"
+    echo -e "${CYAN}✧ STREAMING MODULE ✧${NC}"
     echo "🎬 Netflix:      ${STREAM[0]}"
     echo "📺 HBO Max:      ${STREAM[1]}"
     echo "📺 Hulu:         ${STREAM[2]}"
@@ -354,30 +401,38 @@ run_checks() {
     echo "🌀 Crunchyroll:  ${STREAM[6]}"
     echo
 
-    echo -e "${CYAN}💠 GAMING MODULE 💠${NC}"
-    echo "🎮 Steam:        ${GAME[0]}"
-    echo "🎮 Epic Games:   ${GAME[1]}"
-    echo "🎮 PSN:          ${GAME[2]}"
-    echo "🎮 Xbox:         ${GAME[3]}"
-    echo "🎮 Battle.net:   ${GAME[4]}"
-    echo "🎮 Rockstar:     ${GAME[5]}"
+    echo -e "${CYAN}✧ STREAMING SUBSCRIPTIONS ✧${NC}"
+    echo "🎬 Netflix:      ${STREAM_SUB[0]}"
+    echo "📺 HBO Max:      ${STREAM_SUB[1]}"
+    echo "📺 Hulu:         ${STREAM_SUB[2]}"
+    echo "🎥 Prime Video:  ${STREAM_SUB[3]}"
+    echo "📺 Paramount+:   ${STREAM_SUB[4]}"
+    echo "🍏 Apple TV+:    ${STREAM_SUB[5]}"
+    echo "🌀 Crunchyroll:  ${STREAM_SUB[6]}"
     echo
 
-    echo -e "${CYAN}💠 SOCIAL MODULE 💠${NC}"
-    echo "📸 Instagram:    ${SOCIAL[0]}"
-    echo "🐦 Twitter/X:    ${SOCIAL[1]}"
-    echo "📱 WhatsApp:     ${SOCIAL[2]}"
-    echo "👽 Reddit:       ${SOCIAL[3]}"
-    echo "✈ Telegram:     ${SOCIAL[4]}"
+    echo -e "${CYAN}✧ META MODULE ✧${NC}"
+    echo "📘 Facebook:     ${SOCIAL[0]}"
+    echo "💬 Messenger:    ${SOCIAL[1]}"
+    echo "📸 Instagram:    ${SOCIAL[2]}"
+    echo "🧵 Threads:      ${SOCIAL[3]}"
+    echo "📱 WhatsApp Web: ${SOCIAL[4]}"
+    echo "📊 Meta Business:${SOCIAL[5]}"
     echo
 
-    echo -e "${CYAN}💠 STORES MODULE 💠${NC}"
+    echo -e "${CYAN}✧ SOCIAL MODULE ✧${NC}"
+    echo "🐦 Twitter/X:    ${SOCIAL[6]}"
+    echo "👽 Reddit:       ${SOCIAL[7]}"
+    echo "✈ Telegram:     ${SOCIAL[8]}"
+    echo
+
+    echo -e "${CYAN}✧ STORES MODULE ✧${NC}"
     echo "🛒 Amazon:       ${STORES[0]}"
     echo "🛒 eBay:         ${STORES[1]}"
     echo "🛒 AliExpress:   ${STORES[2]}"
     echo
 
-    echo -e "${CYAN}💠 BLACKLIST STATUS 💠${NC}"
+    echo -e "${CYAN}✧ BLACKLIST STATUS ✧${NC}"
     echo "🛡 Spamhaus:     $BL_SPAM"
     echo "🛡 SORBS:        $BL_SORBS"
     echo "🌐 IP:           $BL_IP"
