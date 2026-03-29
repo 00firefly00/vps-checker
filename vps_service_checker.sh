@@ -124,6 +124,24 @@ check_streaming() {
     fi
 }
 
+check_meta_worlds() {
+    local resp
+    resp=$(curl -4 -s --max-time 10 \
+        -H "User-Agent: Mozilla/5.0" \
+        https://horizon.meta.com/worlds)
+
+    if [ -z "$resp" ]; then
+        echo "$BAD"
+        return
+    fi
+
+    if echo "$resp" | grep -qiE "not available in your region|not supported|unavailable"; then
+        echo "$BAD"
+    else
+        echo "$OK"
+    fi
+}
+
 check_youtube_main() {
     curl -4 -s --max-time 10 https://www.youtube.com >/dev/null
     [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
@@ -199,6 +217,9 @@ run_checks_core() {
     echo "$(check_streaming https://tv.apple.com 'unsupported region')" >>"$TMP"
     echo "$(check_streaming https://www.crunchyroll.com 'not available')" >>"$TMP"
 
+    echo "[META]" >>"$TMP"
+    echo "$(check_meta_worlds)" >>"$TMP"
+
     echo "[BLACKLIST]" >>"$TMP"
     BL=$(check_blacklist "$IP")
     echo "$(echo "$BL" | cut -d '|' -f1)" >>"$TMP"
@@ -209,7 +230,7 @@ run_checks_core() {
 run_checks() {
     run_checks_core &
     local pid=$!
-    local steps=("IP" "YouTube" "Streaming" "Blacklist")
+    local steps=("IP" "YouTube" "Streaming" "Meta" "Blacklist")
     local i=0
     while kill -0 "$pid" 2>/dev/null; do
         spinner "$pid" "${steps[i]}"
@@ -221,6 +242,7 @@ run_checks() {
     local IP ASN REG TYPE CLASS GS G1 G2 G3
     local YT_MAIN YT_R YT_P
     local ST0 ST1 ST2 ST3 ST4 ST5 ST6
+    local META
     local BL_SP BL_SO BL_IP
 
     IP=$(sed -n '2p' "$TMP")
@@ -245,9 +267,11 @@ run_checks() {
     ST5=$(sed -n '21p' "$TMP")
     ST6=$(sed -n '22p' "$TMP")
 
-    BL_SP=$(sed -n '24p' "$TMP")
-    BL_SO=$(sed -n '25p' "$TMP")
-    BL_IP=$(sed -n '26p' "$TMP")
+    META=$(sed -n '24p' "$TMP")
+
+    BL_SP=$(sed -n '26p' "$TMP")
+    BL_SO=$(sed -n '27p' "$TMP")
+    BL_IP=$(sed -n '28p' "$TMP")
 
     echo "IP INFORMATION"
     echo "IP:      $IP"
@@ -272,6 +296,10 @@ run_checks() {
     echo "Paramount+:   $ST4"
     echo "Apple TV+:    $ST5"
     echo "Crunchyroll:  $ST6"
+    echo
+
+    echo "META"
+    echo "Horizon Worlds: $META"
     echo
 
     echo "BLACKLIST"
