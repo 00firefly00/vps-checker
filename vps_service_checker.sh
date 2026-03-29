@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-
-# v4.8-MIN F4-RAW-FULL (ASCII, bash-only)
+if [ -z "$BASH_VERSION" ]; then
+    exec /usr/bin/env bash "$0" "$@"
+fi
 
 OK="OK"
 BAD="BAD"
@@ -40,7 +41,7 @@ get_region() {
 get_ip_type() {
     local a="$1"
     case "$a" in
-        *Mobile*|*LTE*|*Wireless*|*T-Mobile*|*Verizon*|*AT&T*|*Vodafone*|*Tele2*|*MTS*|*Beeline*|*Megafon*)
+        *Mobile*|*LTE*|*Wireless*|*T-Mobile*|*Verizon*|*Vodafone*|*Tele2*|*MTS*|*Beeline*|*Megafon*)
             echo "Mobile" ;;
         *Residential*|*Home*|*ISP*|*Telecom*)
             echo "Residential" ;;
@@ -80,14 +81,6 @@ classify_ip() {
 check_service() {
     curl -4 -s --max-time 10 "$1" >/dev/null
     [ $? -eq 0 ] && echo "$OK" || echo "$BAD"
-}
-
-check_subscription() {
-    local page
-    page=$(curl -4 -s --max-time 10 "$1")
-    [ -z "$page" ] && { echo "UNKNOWN"; return; }
-    echo "$page" | grep -qiE "not available|unavailable in your region|not available in your country|unsupported location|service is not available" \
-        && echo "BLOCKED" || echo "AVAILABLE"
 }
 
 get_youtube_info() {
@@ -206,36 +199,22 @@ run_checks_core() {
     echo "$(echo "$D" | cut -d '|' -f1)" >>"$TMP"
     echo "$(echo "$D" | cut -d '|' -f2)" >>"$TMP"
 
-    echo "[STREAMING_SUB]" >>"$TMP"
-    echo "$(check_subscription https://www.netflix.com/signup)" >>"$TMP"
-    echo "$(check_subscription https://www.hbomax.com/subscribe)" >>"$TMP"
-    echo "$(check_subscription https://signup.hulu.com/plans)" >>"$TMP"
-    echo "$(check_subscription https://www.primevideo.com/signup)" >>"$TMP"
-    echo "$(check_subscription https://www.paramountplus.com/account/signup/)" >>"$TMP"
-    echo "$(check_subscription https://tv.apple.com/subscribe)" >>"$TMP"
-    echo "$(check_subscription https://www.crunchyroll.com/premium)" >>"$TMP"
-    echo "$(check_service https://www.spotify.com)" >>"$TMP"
-    echo "$(check_subscription https://www.spotify.com/premium)" >>"$TMP"
+    echo "[STREAMING]" >>"$TMP"
+    echo "$(check_service https://www.netflix.com)" >>"$TMP"
+    echo "$(check_service https://www.hbomax.com)" >>"$TMP"
+    echo "$(check_service https://www.hulu.com)" >>"$TMP"
+    echo "$(check_service https://www.primevideo.com)" >>"$TMP"
+    echo "$(check_service https://www.paramountplus.com)" >>"$TMP"
+    echo "$(check_service https://tv.apple.com)" >>"$TMP"
+    echo "$(check_service https://www.crunchyroll.com)" >>"$TMP"
 
-    echo "[AI]" >>"$TMP"
-    echo "$(check_service https://chat.openai.com)" >>"$TMP"
-    echo "$(check_subscription https://chat.openai.com/auth/subscribe)" >>"$TMP"
-    echo "$(check_service https://claude.ai)" >>"$TMP"
-    echo "$(check_subscription https://claude.ai/subscribe)" >>"$TMP"
-    echo "$(check_service https://gemini.google.com)" >>"$TMP"
-    echo "$(check_subscription https://gemini.google.com/upgrade)" >>"$TMP"
-    echo "$(check_service https://copilot.microsoft.com)" >>"$TMP"
-    echo "$(check_subscription https://www.microsoft.com/store/b/copilotpro)" >>"$TMP"
-    echo "$(check_service https://www.perplexity.ai)" >>"$TMP"
-    echo "$(check_subscription https://www.perplexity.ai/pro)" >>"$TMP"
-    echo "$(check_service https://www.midjourney.com)" >>"$TMP"
-    echo "$(check_subscription https://www.midjourney.com/account)" >>"$TMP"
-    echo "$(check_service https://huggingface.co)" >>"$TMP"
-    echo "$(check_subscription https://huggingface.co/pricing)" >>"$TMP"
-    echo "$(check_service https://runwayml.com)" >>"$TMP"
-    echo "$(check_subscription https://runwayml.com/pricing)" >>"$TMP"
-    echo "$(check_service https://elevenlabs.io)" >>"$TMP"
-    echo "$(check_subscription https://elevenlabs.io/pricing)" >>"$TMP"
+    echo "[GAMING]" >>"$TMP"
+    echo "$(check_service https://store.steampowered.com)" >>"$TMP"
+    echo "$(check_service https://store.epicgames.com)" >>"$TMP"
+    echo "$(check_service https://store.playstation.com)" >>"$TMP"
+    echo "$(check_service https://www.xbox.com)" >>"$TMP"
+    echo "$(check_service https://battle.net)" >>"$TMP"
+    echo "$(check_service https://socialclub.rockstargames.com)" >>"$TMP"
 
     echo "[SOCIAL]" >>"$TMP"
     echo "$(check_service https://www.facebook.com)" >>"$TMP"
@@ -263,7 +242,7 @@ run_checks_core() {
 run_checks() {
     run_checks_core &
     local pid=$!
-    local steps=("IP" "YouTube" "Subscriptions" "AI" "Social" "Stores" "Blacklist")
+    local steps=("IP" "YouTube" "Streaming" "Gaming" "Social" "Stores" "Blacklist")
     local i=0
     while kill -0 "$pid" 2>/dev/null; do
         spinner "$pid" "${steps[i]}"
@@ -290,60 +269,42 @@ run_checks() {
     YT_R=$(sed -n '13p' "$TMP")
     YT_P=$(sed -n '14p' "$TMP")
 
-    # STREAMING_SUB: lines 16-24
-    local SUB0 SUB1 SUB2 SUB3 SUB4 SUB5 SUB6 SUB7 SUB8
-    SUB0=$(sed -n '16p' "$TMP")
-    SUB1=$(sed -n '17p' "$TMP")
-    SUB2=$(sed -n '18p' "$TMP")
-    SUB3=$(sed -n '19p' "$TMP")
-    SUB4=$(sed -n '20p' "$TMP")
-    SUB5=$(sed -n '21p' "$TMP")
-    SUB6=$(sed -n '22p' "$TMP")
-    SUB7=$(sed -n '23p' "$TMP")
-    SUB8=$(sed -n '24p' "$TMP")
+    local ST0 ST1 ST2 ST3 ST4 ST5 ST6
+    ST0=$(sed -n '16p' "$TMP")
+    ST1=$(sed -n '17p' "$TMP")
+    ST2=$(sed -n '18p' "$TMP")
+    ST3=$(sed -n '19p' "$TMP")
+    ST4=$(sed -n '20p' "$TMP")
+    ST5=$(sed -n '21p' "$TMP")
+    ST6=$(sed -n '22p' "$TMP")
 
-    # AI: lines 26-43 (18 values: site/sub pairs)
-    local AI0 AI1 AI2 AI3 AI4 AI5 AI6 AI7 AI8 AI9 AI10 AI11 AI12 AI13 AI14 AI15 AI16 AI17
-    AI0=$(sed -n '26p' "$TMP")
-    AI1=$(sed -n '27p' "$TMP")
-    AI2=$(sed -n '28p' "$TMP")
-    AI3=$(sed -n '29p' "$TMP")
-    AI4=$(sed -n '30p' "$TMP")
-    AI5=$(sed -n '31p' "$TMP")
-    AI6=$(sed -n '32p' "$TMP")
-    AI7=$(sed -n '33p' "$TMP")
-    AI8=$(sed -n '34p' "$TMP")
-    AI9=$(sed -n '35p' "$TMP")
-    AI10=$(sed -n '36p' "$TMP")
-    AI11=$(sed -n '37p' "$TMP")
-    AI12=$(sed -n '38p' "$TMP")
-    AI13=$(sed -n '39p' "$TMP")
-    AI14=$(sed -n '40p' "$TMP")
-    AI15=$(sed -n '41p' "$TMP")
-    AI16=$(sed -n '42p' "$TMP")
-    AI17=$(sed -n '43p' "$TMP")
+    local GM0 GM1 GM2 GM3 GM4 GM5
+    GM0=$(sed -n '24p' "$TMP")
+    GM1=$(sed -n '25p' "$TMP")
+    GM2=$(sed -n '26p' "$TMP")
+    GM3=$(sed -n '27p' "$TMP")
+    GM4=$(sed -n '28p' "$TMP")
+    GM5=$(sed -n '29p' "$TMP")
 
-    # SOCIAL: lines 45-53
     local S0 S1 S2 S3 S4 S5 S6 S7 S8
-    S0=$(sed -n '45p' "$TMP")
-    S1=$(sed -n '46p' "$TMP")
-    S2=$(sed -n '47p' "$TMP")
-    S3=$(sed -n '48p' "$TMP")
-    S4=$(sed -n '49p' "$TMP")
-    S5=$(sed -n '50p' "$TMP")
-    S6=$(sed -n '51p' "$TMP")
-    S7=$(sed -n '52p' "$TMP")
-    S8=$(sed -n '53p' "$TMP")
+    S0=$(sed -n '31p' "$TMP")
+    S1=$(sed -n '32p' "$TMP")
+    S2=$(sed -n '33p' "$TMP")
+    S3=$(sed -n '34p' "$TMP")
+    S4=$(sed -n '35p' "$TMP")
+    S5=$(sed -n '36p' "$TMP")
+    S6=$(sed -n '37p' "$TMP")
+    S7=$(sed -n '38p' "$TMP")
+    S8=$(sed -n '39p' "$TMP")
 
-    # STORES: lines 55-57
-    local ST0 ST1 ST2
-    ST0=$(sed -n '55p' "$TMP")
-    ST1=$(sed -n '56p' "$TMP")
-    ST2=$(sed -n '57p' "$TMP")
+    local STS0 STS1 STS2
+    STS0=$(sed -n '41p' "$TMP")
+    STS1=$(sed -n '42p' "$TMP")
+    STS2=$(sed -n '43p' "$TMP")
 
-    BL_SP=$(sed -n '59p' "$TMP")
-    BL_SO=$(sed -n '60p' "$TMP")
-    BL_IP=$(sed -n '61p' "$TMP")
+    BL_SP=$(sed -n '45p' "$TMP")
+    BL_SO=$(sed -n '46p' "$TMP")
+    BL_IP=$(sed -n '47p' "$TMP")
 
     rm -f "$TMP"
 
@@ -362,28 +323,23 @@ run_checks() {
     echo "Premium: $YT_P"
     echo
 
-    echo "STREAMING SUBSCRIPTIONS"
-    echo "Netflix:         $SUB0"
-    echo "HBO Max:         $SUB1"
-    echo "Hulu:            $SUB2"
-    echo "Prime Video:     $SUB3"
-    echo "Paramount+:      $SUB4"
-    echo "Apple TV+:       $SUB5"
-    echo "Crunchyroll:     $SUB6"
-    echo "Spotify:         $SUB7"
-    echo "Spotify Premium: $SUB8"
+    echo "STREAMING"
+    echo "Netflix:      $ST0"
+    echo "HBO Max:      $ST1"
+    echo "Hulu:         $ST2"
+    echo "Prime Video:  $ST3"
+    echo "Paramount+:   $ST4"
+    echo "Apple TV+:    $ST5"
+    echo "Crunchyroll:  $ST6"
     echo
 
-    echo "AI SERVICES"
-    echo "OpenAI:      $AI0 | $AI1"
-    echo "Claude:      $AI2 | $AI3"
-    echo "Gemini:      $AI4 | $AI5"
-    echo "Copilot:     $AI6 | $AI7"
-    echo "Perplexity:  $AI8 | $AI9"
-    echo "Midjourney:  $AI10 | $AI11"
-    echo "HuggingFace: $AI12 | $AI13"
-    echo "RunwayML:    $AI14 | $AI15"
-    echo "ElevenLabs:  $AI16 | $AI17"
+    echo "GAMING"
+    echo "Steam:        $GM0"
+    echo "Epic Games:   $GM1"
+    echo "PlayStation:  $GM2"
+    echo "Xbox:         $GM3"
+    echo "Battle.net:   $GM4"
+    echo "Rockstar:     $GM5"
     echo
 
     echo "SOCIAL"
@@ -399,9 +355,9 @@ run_checks() {
     echo
 
     echo "STORES"
-    echo "Amazon:     $ST0"
-    echo "eBay:       $ST1"
-    echo "AliExpress: $ST2"
+    echo "Amazon:     $STS0"
+    echo "eBay:       $STS1"
+    echo "AliExpress: $STS2"
     echo
 
     echo "BLACKLIST"
