@@ -1,49 +1,99 @@
-# VPS Service Checker 🚀
+# VPS Service Checker
 
-Лёгкий и удобный bash-скрипт для проверки VPS/IP: доступность сервисов, регион, GeoIP, blacklist и тип IP.
-
----
-
-## 🔍 Возможности
-
-**Проверка сервисов:**
-- Netflix  
-- YouTube (с определением Premium)  
-- Disney+  
-- TikTok  
-- Spotify  
-- ChatGPT  
-- Meta (Facebook)  
-- Microsoft  
-
-**Определение региона:**
-- Реальный регион (по сервисам)  
-- GeoIP (несколько баз одновременно)  
-
-**Анализ IP:**
-- Тип IP (Datacenter / Residential / Mobile)  
-- ASN (провайдер)  
-- Проверка blacklist (Spamhaus, SORBS)  
-
-**Дополнительно:**
-- Тест скорости (Speedtest)  
-- Цветной вывод  
-- Анимация во время проверки  
-- Удобный вывод для смартфона  
+Универсальный Bash‑скрипт для диагностики доступности онлайн‑сервисов с вашего VPS, сервера или прокси‑узла.  
+Определяет публичный IP, регион, ASN, а также проверяет стриминги, соцсети, игровые платформы и инфраструктурные сервисы.
 
 ---
 
-## ⚙️ Быстрый запуск
+## ✨ Возможности
 
+- Определение:
+  - Публичного IPv4
+  - Публичного IPv6
+  - ASN, страны, региона, провайдера
+- Проверка доступности сервисов:
+  - Netflix
+  - YouTube Premium
+  - Disney+
+  - OpenAI / ChatGPT
+  - Steam
+  - TikTok
+  - Telegram
+  - Reddit
+  - GitHub
+  - Cloudflare Warp / Zero Trust
+- Цветной, компактный вывод (🟢🟡🔴)
+- Минимальные зависимости — только `curl`
+- Поддержка большинства Linux‑дистрибутивов:
+  - Ubuntu / Debian
+  - CentOS / Rocky / AlmaLinux
+  - Alpine
+  - Arch
+  - OpenWRT
+  - Docker‑контейнеры
+
+---
+
+## 🚀 Быстрый запуск
+
+### Однострочный запуск
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/00firefly00/vps-checker/main/vps_service_checker.sh)
 ```
-# ⚠️ Примечания
+## 🧪 Проверяемые сервисы
 
-## 🛰️ GeoIP‑сервисы
-- Некоторые GeoIP‑провайдеры могут **не отвечать** или **ограничивать количество запросов**.  
-- Возможны **расхождения региона** между разными базами данных.
+| Категория        | Сервисы                                   |
+|------------------|--------------------------------------------|
+| **IP / Geo**     | IPv4, IPv6, ASN, страна, провайдер         |
+| **Стриминги**    | Netflix, YouTube Premium, Disney+          |
+| **AI‑сервисы**   | OpenAI / ChatGPT                           |
+| **Игры**         | Steam                                      |
+| **Соцсети**      | TikTok, Telegram, Reddit                   |
+| **Инфраструктура** | GitHub, Cloudflare                       |
 
-## ▶️ YouTube Premium
-- Доступность YouTube Premium определяется **по возможности открыть страницу** `https://www.youtube.com/premium`.  
-- Если страница недоступна или происходит редирект — Premium в регионе официально не поддерживается.
+Статусы проверки:
+- 🟢 доступно  
+- 🟡 частично / регионально  
+- 🔴 заблокировано  
+- ⚪ невозможно определить  
+
+---
+
+## 📄 Пример вывода
+
+IP: 203.0.113.10 (AS12345 Example ISP, US)
+
+Netflix:         🟢 Full Access (US)
+YouTube Premium: 🟡 Region Locked
+OpenAI:          🟢 Available
+Steam:           🔴 Blocked
+TikTok:          🟢 Available
+Telegram:        🟢 Available
+
+
+---
+
+## 🛠 Требования
+
+- bash или совместимая оболочка  
+- curl  
+
+---
+
+## 📁 Структура скрипта
+
+- Модульные функции для каждой проверки  
+- Fallback‑механизмы API  
+- Безопасный парсинг JSON через grep/sed/awk  
+- Цветной ANSI‑вывод  
+- Поддержка IPv4 и IPv6  
+
+---
+
+
+
+---
+
+## 📜 Лицензия
+
+MIT License.
