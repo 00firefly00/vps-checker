@@ -61,14 +61,14 @@ bash <(curl -sL https://raw.githubusercontent.com/00firefly00/vps-checker/main/v
 
 ## 📄 Пример вывода
 
-IP: 203.0.113.10 (AS12345 Example ISP, US)
+= IP: 203.0.113.10 (AS12345 Example ISP, US)
 
-Netflix:         🟢 Full Access (US)
-YouTube Premium: 🟡 Region Locked
-OpenAI:          🟢 Available
-Steam:           🔴 Blocked
-TikTok:          🟢 Available
-Telegram:        🟢 Available
+- Netflix:         🟢 Full Access (US)
+= YouTube Premium: 🟡 Region Locked
+= OpenAI:          🟢 Available
+= Steam:           🔴 Blocked
+= TikTok:          🟢 Available
+= Telegram:        🟢 Available
 
 
 ---
