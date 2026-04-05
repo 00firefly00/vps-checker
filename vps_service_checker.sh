@@ -60,7 +60,7 @@ check_openai() {
 check_youtube_premium() {
     local r
     r=$(curl -4 -s --max-time 8 https://www.youtube.com/premium)
-    echo "$r" | grep -qi "YouTube Premium" && echo "Есть" || echo "Неизвестно"
+    echo "$r" | grep -qi "YouTube Premium" && echo "Доступен" || echo "Неизвестно"
 }
 
 # -----------------------------
@@ -71,28 +71,23 @@ get_ip_type() {
     local rdns="$2"
 
     if echo "$a" | grep -qiE "OVH|Hetzner|DigitalOcean|Linode|AWS|Google|Azure|Contabo|Vultr|Leaseweb|M247|Choopa|Scaleway|Netcup|Oracle|Alibaba|Tencent|Kamatera|G-Core|Cloudflare|Fastly|Akamai"; then
-        echo "Datacenter"
-        return
+        echo "Datacenter"; return
     fi
 
     if echo "$a" | grep -qiE "T-Mobile|Verizon|Vodafone|Tele2|MTS|Beeline|Megafon|AT&T|Sprint|Orange|Claro|Telia|Telenor|Rogers|Bell|Telus"; then
-        echo "Mobile"
-        return
+        echo "Mobile"; return
     fi
 
     if echo "$a" | grep -qiE "Comcast|Spectrum|Cox|Xfinity|BT|Virgin|Sky|Deutsche|Telekom|Orange Home|Rostelecom|Home|Residential|ISP"; then
-        echo "Residential"
-        return
+        echo "Residential"; return
     fi
 
     if echo "$rdns" | grep -qiE "static|dynamic|pool"; then
-        echo "Residential"
-        return
+        echo "Residential"; return
     fi
 
     if echo "$rdns" | grep -qiE "server|vps|cloud|hosting"; then
-        echo "Datacenter"
-        return
+        echo "Datacenter"; return
     fi
 
     echo "Residential"
@@ -102,18 +97,10 @@ classify_ip() {
     local t="$1" g="$2" a="$3" rdns="$4"
 
     case "$t" in
-        Residential)
-            echo "Residential (home ISP)"
-            ;;
-        Mobile)
-            echo "Mobile (cellular network)"
-            ;;
+        Residential) echo "Residential (home ISP)" ;;
+        Mobile) echo "Mobile (cellular network)" ;;
         Datacenter)
-            if [ "$g" = "mismatch" ]; then
-                echo "VPN/Proxy (datacenter, GEO mismatch)"
-            else
-                echo "Hosting / Datacenter"
-            fi
+            [ "$g" = "mismatch" ] && echo "VPN/Proxy (datacenter, GEO mismatch)" || echo "Hosting / Datacenter"
             ;;
         *)
             if echo "$rdns" | grep -qiE "server|vps|cloud|hosting"; then
@@ -154,27 +141,103 @@ print_geoip() {
 }
 
 # -----------------------------
-#  STREAMING CHECKS (OLD + NEW)
+#  STREAMING CHECKS
 # -----------------------------
 check_streaming_service() {
     curl -4 -s --max-time 10 "$1" >/dev/null
     [ $? -eq 0 ] && echo "Доступен" || echo "Недоступен"
 }
 
+check_streaming_premium() {
+    local url="$1"
+    local keyword="$2"
+    local resp
+    resp=$(curl -4 -s --max-time 10 "$url")
+    echo "$resp" | grep -qi "$keyword" && echo -e "${GREEN}Премиум доступен${NC}" || echo -e "${RED}Премиум недоступен${NC}"
+}
+
+# -----------------------------
+#  YOUTUBE
+# -----------------------------
+check_youtube_main() {
+    curl -4 -s --max-time 10 https://www.youtube.com >/dev/null
+    [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
+}
+
+get_youtube_region() {
+    local P R
+    P=$(curl -4 -s --max-time 10 "https://www.youtube.com/?hl=en")
+    R=$(echo "$P" | grep -o '"GL":"[A-Z][A-Z]"' | cut -d '"' -f4)
+    [ -z "$R" ] && R=$(get_region)
+    echo "$R"
+}
+
+# -----------------------------
+#  SPOTIFY
+# -----------------------------
+check_spotify_main() {
+    curl -4 -s --max-time 10 https://www.spotify.com >/dev/null
+    [ $? -eq 0 ] && echo "AVAILABLE" || echo "BLOCKED"
+}
+
+check_spotify_premium() {
+    local J C
+    J=$(curl -4 -s --max-time 10 "https://spclient.wg.spotify.com/signup/public/v1/account?validate=1&email=test@test.com")
+
+    [ -z "$J" ] && { echo "UNKNOWN"; return; }
+
+    echo "$J" | grep -q '"can_accept_premium":false' && { echo "NOT AVAILABLE"; return; }
+    echo "$J" | grep -q '"can_accept_premium":true' && { echo "AVAILABLE"; return; }
+
+    C=$(echo "$J" | grep -o '"country":"[A-Z][A-Z]"' | cut -d '"' -f4)
+
+    case "$C" in
+        RU|BY|IR|SD|KP|SY) echo "NOT AVAILABLE" ;;
+        *) echo "AVAILABLE" ;;
+    esac
+}
+
+# -----------------------------
+#  BLACKLIST
+# -----------------------------
+check_blacklist() {
+    local IP REV SPAM SORBS
+    IP="$1"
+    REV=$(echo "$IP" | awk -F. '{print $4"."$3"."$2"."$1}')
+    SPAM=$(dig +short ${REV}.zen.spamhaus.org 2>/dev/null)
+    SORBS=$(dig +short ${REV}.dnsbl.sorbs.net 2>/dev/null)
+    [ -z "$SPAM" ] && SPAM="CLEAN" || SPAM="LISTED"
+    [ -z "$SORBS" ] && SORBS="CLEAN" || SORBS="LISTED"
+    echo "$SPAM|$SORBS|$IP"
+}
+
+# -----------------------------
+#  SPEEDTEST
+# -----------------------------
+speed_test() {
+    if command -v speedtest >/dev/null 2>&1; then
+        speedtest --simple
+    elif command -v speedtest-cli >/dev/null 2>&1; then
+        speedtest-cli --simple
+    else
+        echo "speedtest-cli не найден, выполняю простой тест..."
+        wget -4 -O /dev/null https://speed.hetzner.de/100MB.bin 2>&1 | grep -o '[0-9.]\+ [KM]*B/s'
+    fi
+}
+
 # -----------------------------
 #  CORE CHECKS
 # -----------------------------
 run_checks_core() {
-    local IP IPV6 ASN RDNS G G1 G2 G3 GS T C
+    local IP ASN RDNS G G1 G2 G3 GS T C BL
 
     IP=$(get_ip)
-    IPV6=$(get_ipv6)
     ASN=$(get_asn)
     RDNS=$(dig -x "$IP" +short 2>/dev/null)
 
     echo "[IP]" >"$TMP"
     echo "$IP" >>"$TMP"
-    echo "$IPV6" >>"$TMP"
+    echo "$(get_ipv6)" >>"$TMP"
     echo "$ASN" >>"$TMP"
     echo "$(get_region)" >>"$TMP"
 
@@ -194,12 +257,37 @@ run_checks_core() {
     echo "$G2" >>"$TMP"
     echo "$G3" >>"$TMP"
 
-    echo "[SERVICES]" >>"$TMP"
+    echo "[YOUTUBE]" >>"$TMP"
+    echo "$(check_youtube_main)" >>"$TMP"
+    echo "$(get_youtube_region)" >>"$TMP"
+    echo "$(check_youtube_premium)" >>"$TMP"
+
+    echo "[STREAMING]" >>"$TMP"
 
     echo "$(check_streaming_service https://www.netflix.com)" >>"$TMP"
-    echo "$(check_youtube_premium)" >>"$TMP"
-    echo "$(check_simple https://www.disneyplus.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://www.netflix.com/signup 'Choose your plan')" >>"$TMP"
 
+    echo "$(check_streaming_service https://www.hbomax.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    echo "$(check_streaming_service https://www.hulu.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    echo "$(check_streaming_service https://www.primevideo.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    echo "$(check_streaming_service https://www.paramountplus.com)" >>"$TMP"
+    echo -e "${RED}Премиум недоступен${NC}" >>"$TMP"
+
+    echo "$(check_streaming_service https://tv.apple.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://tv.apple.com 'Start Free Trial')" >>"$TMP"
+
+    echo "$(check_streaming_service https://www.crunchyroll.com)" >>"$TMP"
+    echo "$(check_streaming_premium https://www.crunchyroll.com 'premium')" >>"$TMP"
+
+    # NEW SERVICES
+    echo "[EXTRA]" >>"$TMP"
+    echo "$(check_simple https://www.disneyplus.com)" >>"$TMP"
     echo "$(check_openai)" >>"$TMP"
     echo "$(check_simple https://store.steampowered.com)" >>"$TMP"
     echo "$(check_simple https://www.tiktok.com)" >>"$TMP"
@@ -207,6 +295,16 @@ run_checks_core() {
     echo "$(check_simple https://www.reddit.com)" >>"$TMP"
     echo "$(check_simple https://github.com)" >>"$TMP"
     echo "$(check_simple https://www.cloudflare.com)" >>"$TMP"
+
+    echo "[SPOTIFY]" >>"$TMP"
+    echo "$(check_spotify_main)" >>"$TMP"
+    echo "$(check_spotify_premium)" >>"$TMP"
+
+    echo "[BLACKLIST]" >>"$TMP"
+    BL=$(check_blacklist "$IP")
+    echo "$(echo "$BL" | cut -d '|' -f1)" >>"$TMP"
+    echo "$(echo "$BL" | cut -d '|' -f2)" >>"$TMP"
+    echo "$(echo "$BL" | cut -d '|' -f3)" >>"$TMP"
 }
 
 # -----------------------------
@@ -214,51 +312,75 @@ run_checks_core() {
 # -----------------------------
 run_checks() {
     run_checks_core &
-    pid=$!
-
-    steps=("IP" "Services")
-    i=0
-
+    local pid=$!
+    local steps=("IP" "YouTube" "Streaming" "Extra" "Spotify" "Blacklist")
+    local i=0
     while kill -0 "$pid" 2>/dev/null; do
         spinner "$pid" "${steps[i]}"
         i=$(( (i + 1) % ${#steps[@]} ))
     done
-
     wait "$pid"
     clear
 
     echo "IP INFORMATION"
-    echo "IPv4:   $(sed -n '2p' "$TMP")"
-    echo "IPv6:   $(sed -n '3p' "$TMP")"
-    echo "ASN:    $(sed -n '4p' "$TMP")"
+    echo "IPv4: $(sed -n '2p' "$TMP")"
+    echo "IPv6: $(sed -n '3p' "$TMP")"
+    echo "ASN:  $(sed -n '4p' "$TMP")"
     echo "Region: $(sed -n '5p' "$TMP")"
-    echo "Type:   $(sed -n '6p' "$TMP")"
-    echo "Class:  $(sed -n '7p' "$TMP")"
+    echo "Type: $(sed -n '6p' "$TMP")"
+    echo "Class: $(sed -n '7p' "$TMP")"
     print_geoip "$(sed -n '9p' "$TMP")" "$(sed -n '10p' "$TMP")" "$(sed -n '11p' "$TMP")" "$(sed -n '8p' "$TMP")"
     echo
 
-    echo "SERVICES"
-    echo "Netflix:        $(sed -n '13p' "$TMP")"
-    echo "YouTube Prem:   $(sed -n '14p' "$TMP")"
-    echo "Disney+:        $(sed -n '15p' "$TMP")"
-    echo "OpenAI:         $(sed -n '16p' "$TMP")"
-    echo "Steam:          $(sed -n '17p' "$TMP")"
-    echo "TikTok:         $(sed -n '18p' "$TMP")"
-    echo "Telegram:       $(sed -n '19p' "$TMP")"
-    echo "Reddit:         $(sed -n '20p' "$TMP")"
-    echo "GitHub:         $(sed -n '21p' "$TMP")"
-    echo "Cloudflare:     $(sed -n '22p' "$TMP")"
+    echo "YOUTUBE"
+    echo "Status: $(sed -n '13p' "$TMP")"
+    echo "Region: $(sed -n '14p' "$TMP")"
+    echo "Premium: $(sed -n '15p' "$TMP")"
+    echo
+
+    echo "STREAMING"
+    echo "Netflix: $(sed -n '17p' "$TMP") | $(sed -n '18p' "$TMP")"
+    echo "HBO Max: $(sed -n '19p' "$TMP") | $(sed -n '20p' "$TMP")"
+    echo "Hulu: $(sed -n '21p' "$TMP") | $(sed -n '22p' "$TMP")"
+    echo "Prime: $(sed -n '23p' "$TMP") | $(sed -n '24p' "$TMP")"
+    echo "Paramount+: $(sed -n '25p' "$TMP") | $(sed -n '26p' "$TMP")"
+    echo "Apple TV+: $(sed -n '27p' "$TMP") | $(sed -n '28p' "$TMP")"
+    echo "Crunchyroll: $(sed -n '29p' "$TMP") | $(sed -n '30p' "$TMP")"
+    echo
+
+    echo "EXTRA SERVICES"
+    echo "Disney+: $(sed -n '32p' "$TMP")"
+    echo "OpenAI: $(sed -n '33p' "$TMP")"
+    echo "Steam: $(sed -n '34p' "$TMP")"
+    echo "TikTok: $(sed -n '35p' "$TMP")"
+    echo "Telegram: $(sed -n '36p' "$TMP")"
+    echo "Reddit: $(sed -n '37p' "$TMP")"
+    echo "GitHub: $(sed -n '38p' "$TMP")"
+    echo "Cloudflare: $(sed -n '39p' "$TMP")"
+    echo
+
+    echo "SPOTIFY"
+    echo "Service: $(sed -n '41p' "$TMP")"
+    echo "Premium: $(sed -n '42p' "$TMP")"
+    echo
+
+    echo "BLACKLIST"
+    echo "Spamhaus: $(sed -n '44p' "$TMP")"
+    echo "SORBS: $(sed -n '45p' "$TMP")"
+    echo "IP: $(sed -n '46p' "$TMP")"
     echo
 }
 
 while true; do
     echo "1) Full check"
-    echo "2) Exit"
+    echo "2) Speed test"
+    echo "3) Exit"
     printf "> "
     read -r C
     case "$C" in
         1) run_checks ;;
-        2) exit 0 ;;
+        2) speed_test ;;
+        3) exit 0 ;;
         *) echo "Invalid choice" ;;
     esac
 done
