@@ -45,7 +45,7 @@ get_region() {
 }
 
 # -----------------------------
-#  NEW SERVICE CHECKS
+#  SERVICE CHECKS
 # -----------------------------
 check_simple() {
     curl -4 -s --max-time 8 "$1" >/dev/null
@@ -53,14 +53,23 @@ check_simple() {
 }
 
 check_openai() {
-    curl -4 -s --max-time 8 https://api.openai.com >/dev/null
-    [ $? -eq 0 ] && echo "Доступен" || echo "Недоступен"
-}
+    local code
+    code=$(curl -4 -s -o /dev/null -w "%{http_code}" --max-time 8 https://api.openai.com/v1/models)
 
-check_youtube_premium() {
-    local r
-    r=$(curl -4 -s --max-time 8 https://www.youtube.com/premium)
-    echo "$r" | grep -qi "YouTube Premium" && echo "Доступен" || echo "Неизвестно"
+    case "$code" in
+        401|403)
+            echo "Доступен (ограничен API)"
+            ;;
+        200)
+            echo "Доступен"
+            ;;
+        000)
+            echo "Недоступен"
+            ;;
+        *)
+            echo "Ошибка ($code)"
+            ;;
+    esac
 }
 
 # -----------------------------
@@ -260,7 +269,6 @@ run_checks_core() {
     echo "[YOUTUBE]" >>"$TMP"
     echo "$(check_youtube_main)" >>"$TMP"
     echo "$(get_youtube_region)" >>"$TMP"
-    echo "$(check_youtube_premium)" >>"$TMP"
 
     echo "[STREAMING]" >>"$TMP"
 
@@ -285,7 +293,6 @@ run_checks_core() {
     echo "$(check_streaming_service https://www.crunchyroll.com)" >>"$TMP"
     echo "$(check_streaming_premium https://www.crunchyroll.com 'premium')" >>"$TMP"
 
-    # NEW SERVICES
     echo "[EXTRA]" >>"$TMP"
     echo "$(check_simple https://www.disneyplus.com)" >>"$TMP"
     echo "$(check_openai)" >>"$TMP"
@@ -335,39 +342,38 @@ run_checks() {
     echo "YOUTUBE"
     echo "Status: $(sed -n '13p' "$TMP")"
     echo "Region: $(sed -n '14p' "$TMP")"
-    echo "Premium: $(sed -n '15p' "$TMP")"
     echo
 
     echo "STREAMING"
-    echo "Netflix: $(sed -n '17p' "$TMP") | $(sed -n '18p' "$TMP")"
-    echo "HBO Max: $(sed -n '19p' "$TMP") | $(sed -n '20p' "$TMP")"
-    echo "Hulu: $(sed -n '21p' "$TMP") | $(sed -n '22p' "$TMP")"
-    echo "Prime: $(sed -n '23p' "$TMP") | $(sed -n '24p' "$TMP")"
-    echo "Paramount+: $(sed -n '25p' "$TMP") | $(sed -n '26p' "$TMP")"
-    echo "Apple TV+: $(sed -n '27p' "$TMP") | $(sed -n '28p' "$TMP")"
-    echo "Crunchyroll: $(sed -n '29p' "$TMP") | $(sed -n '30p' "$TMP")"
+    echo "Netflix: $(sed -n '16p' "$TMP") | $(sed -n '17p' "$TMP")"
+    echo "HBO Max: $(sed -n '18p' "$TMP") | $(sed -n '19p' "$TMP")"
+    echo "Hulu: $(sed -n '20p' "$TMP") | $(sed -n '21p' "$TMP")"
+    echo "Prime: $(sed -n '22p' "$TMP") | $(sed -n '23p' "$TMP")"
+    echo "Paramount+: $(sed -n '24p' "$TMP") | $(sed -n '25p' "$TMP")"
+    echo "Apple TV+: $(sed -n '26p' "$TMP") | $(sed -n '27p' "$TMP")"
+    echo "Crunchyroll: $(sed -n '28p' "$TMP") | $(sed -n '29p' "$TMP")"
     echo
 
     echo "EXTRA SERVICES"
-    echo "Disney+: $(sed -n '32p' "$TMP")"
-    echo "OpenAI: $(sed -n '33p' "$TMP")"
-    echo "Steam: $(sed -n '34p' "$TMP")"
-    echo "TikTok: $(sed -n '35p' "$TMP")"
-    echo "Telegram: $(sed -n '36p' "$TMP")"
-    echo "Reddit: $(sed -n '37p' "$TMP")"
-    echo "GitHub: $(sed -n '38p' "$TMP")"
-    echo "Cloudflare: $(sed -n '39p' "$TMP")"
+    echo "Disney+: $(sed -n '31p' "$TMP")"
+    echo "OpenAI: $(sed -n '32p' "$TMP")"
+    echo "Steam: $(sed -n '33p' "$TMP")"
+    echo "TikTok: $(sed -n '34p' "$TMP")"
+    echo "Telegram: $(sed -n '35p' "$TMP")"
+    echo "Reddit: $(sed -n '36p' "$TMP")"
+    echo "GitHub: $(sed -n '37p' "$TMP")"
+    echo "Cloudflare: $(sed -n '38p' "$TMP")"
     echo
 
     echo "SPOTIFY"
-    echo "Service: $(sed -n '41p' "$TMP")"
-    echo "Premium: $(sed -n '42p' "$TMP")"
+    echo "Service: $(sed -n '40p' "$TMP")"
+    echo "Premium: $(sed -n '41p' "$TMP")"
     echo
 
     echo "BLACKLIST"
-    echo "Spamhaus: $(sed -n '44p' "$TMP")"
-    echo "SORBS: $(sed -n '45p' "$TMP")"
-    echo "IP: $(sed -n '46p' "$TMP")"
+    echo "Spamhaus: $(sed -n '43p' "$TMP")"
+    echo "SORBS: $(sed -n '44p' "$TMP")"
+    echo "IP: $(sed -n '45p' "$TMP")"
     echo
 }
 
