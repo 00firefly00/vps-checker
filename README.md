@@ -1,99 +1,74 @@
-# VPS Service Checker
+# 🚀 NetCheck — VPS / Network Checker
 
-Универсальный Bash‑скрипт для диагностики доступности онлайн‑сервисов с вашего VPS, сервера или прокси‑узла.  
-Определяет публичный IP, регион, ASN, а также проверяет стриминги, соцсети, игровые платформы и инфраструктурные сервисы.
-
----
-
-## ✨ Возможности
-
-- Определение:
-  - Публичного IPv4
-  - Публичного IPv6
-  - ASN, страны, региона, провайдера
-- Проверка доступности сервисов:
-  - Netflix
-  - YouTube Premium
-  - Disney+
-  - OpenAI / ChatGPT
-  - Steam
-  - TikTok
-  - Telegram
-  - Reddit
-  - GitHub
-  - Cloudflare Warp / Zero Trust
-- Цветной, компактный вывод (🟢🟡🔴)
-- Минимальные зависимости — только `curl`
-- Поддержка большинства Linux‑дистрибутивов:
-  - Ubuntu / Debian
-  - CentOS / Rocky / AlmaLinux
-  - Alpine
-  - Arch
-  - OpenWRT
-  - Docker‑контейнеры
+Многофункциональный bash-скрипт для проверки сетевых параметров сервера, IP-адреса и доступности популярных сервисов.
 
 ---
 
-## 🚀 Быстрый запуск
+## 📦 Возможности
 
-### Однострочный запуск
+### 🌐 Сетевые данные
+- Определение публичного IPv4
+- Определение публичного IPv6
+- ASN (провайдер)
+- Страна (через несколько GEOIP сервисов)
+- Проверка согласованности GEOIP (mismatch detection)
+- Классификация IP:
+  - Residential (домашний)
+  - Mobile (мобильный)
+  - Datacenter / Hosting
+  - VPN / Proxy (при несовпадении GEO)
+
+---
+
+### 📺 Стриминговые сервисы
+- Netflix (доступ + проверка Premium)
+- HBO Max
+- Hulu
+- Prime Video
+- Paramount+
+- Apple TV+
+- Crunchyroll
+
+---
+
+### ▶️ YouTube
+- Проверка доступности
+- Определение региона
+
+---
+
+### 🌍 Дополнительные сервисы
+- Disney+
+- OpenAI (проверка API доступности)
+- Steam
+- TikTok
+- Telegram Web
+- Reddit
+- GitHub
+- Cloudflare
+
+---
+
+### 🎧 Музыка
+- Spotify (доступность)
+- Spotify Premium (доступность)
+
+---
+
+### 🚫 Проверка IP
+- Spamhaus (blacklist)
+- SORBS (blacklist)
+
+---
+
+### ⚡ Скорость
+- Speedtest (если установлен)
+- Альтернативный тест загрузки (wget)
+
+---
+
+## ⚙️ Запуск
+
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/00firefly00/vps-checker/main/vps_service_checker.sh)
 ```
-## 🧪 Проверяемые сервисы
-
-| Категория        | Сервисы                                   |
-|------------------|--------------------------------------------|
-| **IP / Geo**     | IPv4, IPv6, ASN, страна, провайдер         |
-| **Стриминги**    | Netflix, YouTube Premium, Disney+          |
-| **AI‑сервисы**   | OpenAI / ChatGPT                           |
-| **Игры**         | Steam                                      |
-| **Соцсети**      | TikTok, Telegram, Reddit                   |
-| **Инфраструктура** | GitHub, Cloudflare                       |
-
-Статусы проверки:
-- 🟢 доступно  
-- 🟡 частично / регионально  
-- 🔴 заблокировано  
-- ⚪ невозможно определить  
-
----
-
-## 📄 Пример вывода
-
-= IP: 203.0.113.10 (AS12345 Example ISP, US)
-
-- Netflix:         🟢 Full Access (US)
-- YouTube Premium: 🟡 Region Locked
-- OpenAI:          🟢 Available
-- Steam:           🔴 Blocked
-- TikTok:          🟢 Available
-- Telegram:        🟢 Available
-
-
----
-
-## 🛠 Требования
-
-- bash или совместимая оболочка  
-- curl  
-
----
-
-## 📁 Структура скрипта
-
-- Модульные функции для каждой проверки  
-- Fallback‑механизмы API  
-- Безопасный парсинг JSON через grep/sed/awk  
-- Цветной ANSI‑вывод  
-- Поддержка IPv4 и IPv6  
-
----
-
-
-
----
-
-## 📜 Лицензия
-
-MIT License.
