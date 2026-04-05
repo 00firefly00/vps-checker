@@ -6,10 +6,6 @@ fi
 TMP="/tmp/.netcheck.$$"
 trap 'rm -f "$TMP"' EXIT
 
-GREEN="\033[32m"
-RED="\033[31m"
-NC="\033[0m"
-
 spinner() {
     local pid="$1"
     local msg="$2"
@@ -171,21 +167,25 @@ run_checks_core() {
 }
 
 # -----------------------------
-#  PARSER
+#  PARSER (устойчивый, без ошибок awk)
 # -----------------------------
 get_val() {
     local section="$1"
     local key="$2"
-    awk -v s="[$section]" -v k="$key" '
+    local val
+
+    val=$(awk -v s="[$section]" -v k="$key" '
         $0==s {f=1; next}
         /^
 
 \[/ {f=0}
-        f && $0 ~ k"=" {
-            sub(".*=", "", $0)
+        f && $0 ~ "^"k"=" {
+            sub("^[^=]*=", "", $0)
             print $0
         }
-    ' "$TMP"
+    ' "$TMP")
+
+    [ -z "$val" ] && echo "N/A" || echo "$val"
 }
 
 # -----------------------------
@@ -196,11 +196,15 @@ run_checks() {
     local pid=$!
     local steps=("IP" "GEO" "Streaming" "OpenAI" "Steam" "Warp")
     local i=0
+
     while kill -0 "$pid" 2>/dev/null; do
         spinner "$pid" "${steps[i]}"
         i=$(( (i + 1) % ${#steps[@]} ))
     done
+
     wait "$pid"
+    sleep 0.1
+    sync "$TMP"
     clear
 
     echo "IPV4:"
